@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
+    padding: 60,
   },
   title: { fontSize: 24, fontWeight: "600", marginBottom: 8 },
   input: { width: "100%", borderWidth: 1, borderRadius: 8, padding: 12 },
