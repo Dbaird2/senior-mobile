@@ -16,7 +16,12 @@ export default function SearchScreen() {
     setQuery(text);
     try {
       // Replace with your real API endpoint
-      const response = await fetch(`http://your-api-url.com/search?q=${text}`);
+      const response = await fetch(`https://dataworks-7b7x.onrender.com/phone-api/get-all-assets.php`, 
+	{
+		method: 'POST', 
+		headers: {'Content-Type': 'application/json'}, 
+		body: JSON.stringify({key:123})
+	});
       const data = await response.json();
       setResults(data);
     } catch (error) {
@@ -28,7 +33,7 @@ export default function SearchScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Search</Text>
       <TextInput
-        placeholder="What you want?"
+        placeholder="Please type asset ID"
         style={styles.input}
         value={query}
         onChangeText={handleSearch}
