@@ -23,23 +23,29 @@ export default function SearchScreen() {
 		body: JSON.stringify({key:123})
 	});
       const data = await response.json();
-      setResults(data);
+	  console.log("API:", data);
+      setResults(data.data);
     } catch (error) {
       console.error("Error getting your search:", error);
     }
   };
-
+const new_data = results.slice(20,40);
   return (
-    <View style={styles.container}>
+	<View style={styles.container}>
+<TextInput
+  placeholder="Please type asset ID"
+  style={styles.input}
+  value={query}
+  onChangeText={handleSearch}
+/>
       <Text style={styles.title}>Search</Text>
-      <TextInput
-        placeholder="Please type asset ID"
-        style={styles.input}
-        value={query}
-        onChangeText={handleSearch}
-      />
+	  {new_data.map((item, index)=> 
+		<Text key={index} style={styles.itemText}>
+          {item.bus_unit} - {item.asset_tag} - {item.asset_name} - {item.serial_num}
+        </Text>
+	)}
 
-      <FlatList
+      {/* <FlatList
         data={results}
         keyExtractor={(item, index) =>
           item.id ? item.id.toString() : index.toString()
@@ -49,7 +55,7 @@ export default function SearchScreen() {
             <Text>{item.name}</Text>
           </TouchableOpacity>
         )}
-      />
+      /> */}
     </View>
   );
 }
