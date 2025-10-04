@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { initDb, insertItem, searchItems } from "../../src/db";
+import { initDb, insertItem, searchItems, deleteTable } from "../../src/db";
 
 export default function SearchScreen() {
   const [query, setQuery] = useState("");
@@ -21,9 +21,10 @@ export default function SearchScreen() {
       initDb();
       const data = await response.json();
       const rows = Array.isArray(data?.data) ? data.data : [];
+
       rows.forEach((tag) => {
         try {
-          insertItem(tag.asset_tag, tag.asset_name);
+          insertItem(tag.asset_tag, tag.asset_name, tag.room_tag);
         } catch {}
       });
 
