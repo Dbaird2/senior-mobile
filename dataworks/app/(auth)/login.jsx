@@ -2,18 +2,26 @@ import React, { useEffect, useState } from "react";
 import { View, TextInput, Button, StyleSheet, Alert } from "react-native";
 import { router } from "expo-router";
 import { API_BASE } from "@/constants/env";
-import { initDb, saveAuthKey } from "@/lib/db";
+import { Redirect, useLocalSearchParams } from "expo-router";
+import { getData, removeData, storeLogin } from "../lib/store-login";
 
-const LOGIN_PATH = "/auth/login"; // change if your backend route differs
+import {
+  initDb,
+  logUserInfo,
+  checkUser,
+  dropAuth,
+  listTables,
+  clearUsers,
+  deleteDatabase,
+} from "../lib/sqlite";
+import { store } from "expo-router/build/global-state/router-store";
+
+const LOGIN_PATH = "/phone-api/check-login.php"; // change if backend route differs
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("");
+  let [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    initDb(); // make sure the table exists
-  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -24,15 +32,19 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       // 1) Send email/password to backend
-      const res = await fetch(`${API_BASE}${LOGIN_PATH}`, {
+
+      console.log("Existing stored user/email:", user, email);
+      const url = "https://dataworks-7b7x.onrender.com";
+      const res = await fetch(`${url}${LOGIN_PATH}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email, pw: password }),
       });
-
+      //console.log(res);
       // 2) Handle non-2xx
       if (!res.ok) {
-        let msg = `HTTP ${res.status}`;
+        let msg = `HTTPS ${res.status}`;
+        //console.log("Login failed:", msg);
         try {
           const errJson = await res.json();
           msg = errJson?.message || errJson?.error || msg;
@@ -42,22 +54,50 @@ export default function LoginScreen() {
 
       // 3) Parse JSON and extract a key/token
       const data = await res.json();
-      const key =
-        data?.key ||
-        data?.token ||
-        data?.access_token ||
-        data?.jwt ||
-        null;
-
-      if (!key) throw new Error("No key returned from server.");
+      let key =
+        data?.api_key || data?.token || data?.access_token || data?.jwt || null;
 
       // 4) Save key to SQLite
-      await saveAuthKey(key);
+      //dropAuth(); // clear old
+      //clearUsers(); // clear old
+      let username = email;
+      const regex = /@/i;
+      if (regex.test(email)) {
+        username = email.split("@")[0];
+        console.log("regex passed ", username, email);
+      } else {
+        username = email;
+        email = username + "@csub.edu";
+      }
+      console.log("data", data.status);
+      //await deleteDatabase('sqlite2.db');
+      key = 0;
+      let user;
+      if (data.status === "success") {
+        user = await checkUser(email);
+        console.log("Final email/username:", email, username);
+        if (user === undefined || user.length === 0) {
+          const res = await logUserInfo(email, username);
+          console.log("New user logged:", res);
+          console.log("User created:", email, username);
+        }
+        user = await checkUser(email);
+        console.log(user);
+        // listTables().forEach((table) => console.log(table.name));
+        console.log("Login successful, key saved." + key);
+        // 5) Navigate into the app
+        //router.replace("/(tabs)/home");
+        storeLogin("user", username);
+        storeLogin("email", email);
 
-      // 5) Navigate into the app
-      router.replace("/(tabs)/home");
+        router.push({
+          pathname: "/(tabs)/search",
+          query: { status: "Logged In" },
+        });
+      }
     } catch (err) {
       console.log("Login error:", err);
+
       Alert.alert("Login failed", err?.message || "Please try again.");
     } finally {
       setLoading(false);
