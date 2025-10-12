@@ -8,22 +8,31 @@
     "scheme": "dataworks",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dbaird2.dataworks",
+      "infoPlist": {
+        "NSCameraUsageDescription": "We use the camera to scan barcodes and QR codes."
+      }
     },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.dbaird2.dataworks"
+      "package": "com.dbaird2.dataworks",
+      "permissions": ["android.permission.CAMERA"]
     },
+
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -34,16 +43,21 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+      ],
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "Allow the app to use your camera to scan barcodes and QR codes."
+        }
       ]
     ],
-    "experiments": {
-      "typedRoutes": true
-    },
+
+    "experiments": { "typedRoutes": true },
+
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "8797e4f6-19c4-4f6d-99f2-0759b7075a93"
-      }
+      "eas": { "projectId": "8797e4f6-19c4-4f6d-99f2-0759b7075a93" }
     }
   }
 }
+
