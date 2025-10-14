@@ -14,21 +14,19 @@ import * as FileSystem from "expo-file-system";
 import * as XLSX from "xlsx";
 import { useDispatch, useSelector } from "react-redux";
 import { setData, toggleColumn, showColumn } from "../auditSlice";
+import { Camera, CameraView } from "expo-camera"; // ← use expo-camera
 
 export default function AuditScreen() {
   const dispatch = useDispatch();
-  const { fileInfo, rows, columns, hiddenCols, byHeader } = useSelector(
-    (s) => s.audit
-  );
+  const { fileInfo, rows, columns, hiddenCols } = useSelector((s) => s.audit);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Scanner-related state
+  // Camera / scanning state
   const [hasPermission, setHasPermission] = useState(null); // null | boolean
   const [scanning, setScanning] = useState(false);
   const [scannedData, setScannedData] = useState("");
-  const [ScannerComp, setScannerComp] = useState(() => View); // will hold BarCodeScanner
 
   // ====== CONFIG ======
   const COL_WIDTH = 140;
@@ -55,48 +53,34 @@ export default function AuditScreen() {
     [rows.length]
   );
 
-  // -------- QR / BARCODE: dynamic import & permission flow (GUARD "A") --------
+  // -------- QR via expo-camera --------
   const requestPermissionAndScan = async () => {
     if (Platform.OS === "web") {
       alert("Scanning isn’t available on web.");
       return;
     }
     try {
-      // Dynamically import only when needed (avoids bundling error)
-      const mod = await import("expo-barcode-scanner");
-      const BarCodeScanner = mod?.BarCodeScanner;
-      if (!BarCodeScanner || typeof BarCodeScanner.requestPermissionsAsync !== "function") {
-        alert(
-          "Barcode scanner native module isn’t available in this app build.\n\n" +
-          "If you’re using a development build, rebuild the app.\n" +
-          "If you’re using Expo Go, reinstall it and restart Metro with cache cleared."
-        );
-        return;
-      }
-
-      setScannerComp(() => BarCodeScanner);
-
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
+      const { status } = await Camera.requestCameraPermissionsAsync();
       const granted = status === "granted";
       setHasPermission(granted);
       if (granted) setScanning(true);
     } catch (e) {
-      console.warn("Failed to load scanner:", e);
-      alert("Scanner module not available. Make sure it’s installed and restart the app.");
+      console.warn("Camera permission error:", e);
+      alert("Could not access the camera. Check app permissions.");
     }
   };
 
-  const handleBarCodeScanned = ({ type, data }) => {
+  const handleBarcodeScanned = ({ type, data }) => {
+    // Close the camera and store/display the result
     setScanning(false);
     setScannedData(`Type: ${type}, Data: ${data}`);
-    // Example search:
-    // const match = rows.find((r) => Object.values(r).some(v => String(v ?? "").includes(data)));
-    // if (match) { ... }
+    // Example place to hook into your table search:
+    // const match = rows.find(r => Object.values(r).some(v => String(v ?? "").includes(data)));
     alert(`Scanned: ${data}`);
   };
-  // ---------------------------------------------------------------------------
+  // ------------------------------------
 
-  // Render full-screen scanner if active
+  // Render full-screen camera when scanning
   if (scanning) {
     if (hasPermission === null) {
       return (
@@ -112,8 +96,34 @@ export default function AuditScreen() {
         </View>
       );
     }
-    const Comp = ScannerComp; // BarCodeScanner once loaded
-    return <Comp onBarCodeScanned={handleBarCodeScanned} style={{ flex: 1 }} />;
+
+    return (
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <CameraView
+          // Stop emitting events after a successful scan by closing the view (we setScanning(false) above)
+          onBarcodeScanned={handleBarcodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: [
+              "qr",
+              "pdf417",
+              "ean13",
+              "ean8",
+              "upc_a",
+              "upc_e",
+              "code128",
+              "code39",
+              "code93",
+              "itf14",
+              "codabar",
+              "datamatrix",
+              "aztec",
+              "interleaved2of5",
+            ],
+          }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
+    );
   }
 
   const pickExcel = async () => {
@@ -230,7 +240,10 @@ export default function AuditScreen() {
       <Text style={styles.title}>Audit</Text>
 
       {/* Scan */}
-      <Pressable style={[styles.button, { marginBottom: 10 }]} onPress={requestPermissionAndScan}>
+      <Pressable
+        style={[styles.button, { marginBottom: 10 }]}
+        onPress={requestPermissionAndScan}
+      >
         <Text style={styles.buttonText}>Scan QR / Barcode</Text>
       </Pressable>
 

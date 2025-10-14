@@ -1,5 +1,6 @@
-import { Image } from 'expo-image';
+import { Image, Button, View } from 'react-native';
 import { Platform, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
@@ -20,6 +21,7 @@ export default function HomeScreen() {
         <ThemedText type="title">Welcome!</ThemedText>
         <HelloWave />
       </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 1: Try it</ThemedText>
         <ThemedText>
@@ -35,12 +37,14 @@ export default function HomeScreen() {
           to open developer tools.
         </ThemedText>
       </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 2: Explore</ThemedText>
         <ThemedText>
           {`Tap the Explore tab to learn more about what's included in this starter app.`}
         </ThemedText>
       </ThemedView>
+
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
         <ThemedText>
@@ -51,6 +55,11 @@ export default function HomeScreen() {
           <ThemedText type="defaultSemiBold">app-example</ThemedText>.
         </ThemedText>
       </ThemedView>
+
+      {/* ✅ Add this button to test the camera */}
+      <View style={{ marginTop: 20 }}>
+        <Button title="Open Camera" onPress={() => router.push('/camera')} />
+      </View>
     </ParallaxScrollView>
   );
 }
@@ -74,3 +83,4 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
 });
+
