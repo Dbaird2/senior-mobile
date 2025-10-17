@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { storeLogin } from "../lib/store-login";
-import { initDb, logUserInfo, checkUser } from "../lib/sqlite";
+import { initDb, logUserInfo, checkUser } from "../../src/sqlite";
 
 const LOGIN_PATH = "/phone-api/check-login.php";
 
@@ -92,7 +92,7 @@ export default function LoginScreen() {
         storeLogin("pw", password);
 
         router.push({
-          pathname: "/(tabs)/audit",
+          pathname: "/(tabs)/index",
           query: { status: "Logged In" },
         });
       }
