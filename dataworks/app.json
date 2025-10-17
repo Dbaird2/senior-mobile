@@ -13,7 +13,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.dbaird2.dataworks",
       "infoPlist": {
-        "NSCameraUsageDescription": "We use the camera to scan barcodes and QR codes."
+        "NSCameraUsageDescription": "We use the camera to scan barcodes and QR codes.",
+        "NSLocationWhenInUseUsageDescription": "Allow DataWorks to attach your location to scanned items."
       }
     },
 
@@ -24,7 +25,11 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.dbaird2.dataworks",
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
 
     "web": {
@@ -48,6 +53,12 @@
         "expo-barcode-scanner",
         {
           "cameraPermission": "Allow the app to use your camera to scan barcodes and QR codes."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow DataWorks to access your location so scans can be tagged with where they happened."
         }
       ]
     ],
