@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const storeLogin = async (key, value) => {
   try {
     const ttl = Date.now() + 0.01666 * 60 /*hours*/ * 60 * 1000; // 12 hours from now
+    console.log("Storing", ttl);
     const data = {
       value: value,
       expiration: ttl,
