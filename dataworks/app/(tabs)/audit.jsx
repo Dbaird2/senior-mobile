@@ -19,7 +19,6 @@ export default function AuditScreen() {
 
   // pull redux state (including byHeader JSON)
   const { fileInfo, rows, columns, hiddenCols } = useSelector((state) => state.audit);
-  const byHeader = useSelector((state) => state.audit.byHeader);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
