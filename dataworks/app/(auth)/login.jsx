@@ -39,69 +39,69 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
-    try {
-      console.log("Existing stored user/email:", email);
-      const url = "https://dataworks-7b7x.onrender.com";
-      const res = await fetch(`${url}${LOGIN_PATH}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email, pw: password }),
+    //try {
+    console.log("Existing stored user/email:", email);
+    const url = "https://dataworks-7b7x.onrender.com";
+    const res = await fetch(`${url}${LOGIN_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email, pw: password }),
+    });
+
+    if (!res.ok) {
+      let msg = `HTTPS ${res.status}`;
+      try {
+        const errJson = await res.json();
+        msg = errJson?.message || errJson?.error || msg;
+      } catch {}
+      throw new Error(msg);
+    }
+
+    const data = await res.json();
+    let key =
+      data?.api_key || data?.token || data?.access_token || data?.jwt || null;
+
+    let username = email;
+    const regex = /@/i;
+    if (regex.test(email)) {
+      username = email.split("@")[0];
+      console.log("regex passed ", username, email);
+    } else {
+      username = email;
+      email = username + "@csub.edu";
+    }
+    console.log("data", data.status);
+
+    key = 0;
+    let user;
+    if (data.status === "success") {
+      user = await checkUser(email);
+      console.log("Final email/username:", email, username);
+      if (user === undefined || user.length === 0) {
+        initDb();
+        const res = await logUserInfo(email, username);
+        console.log("New user logged:", res);
+        console.log("User created:", email, username);
+      }
+      user = await checkUser(email);
+      console.log(user);
+      console.log("Login successful, key saved." + key);
+
+      storeLogin("user", username);
+      storeLogin("email", email);
+      storeLogin("pw", password);
+
+      router.push({
+        pathname: "/(tabs)/audit",
+        query: { status: "Logged In" },
       });
-
-      if (!res.ok) {
-        let msg = `HTTPS ${res.status}`;
-        try {
-          const errJson = await res.json();
-          msg = errJson?.message || errJson?.error || msg;
-        } catch {}
-        throw new Error(msg);
-      }
-
-      const data = await res.json();
-      let key =
-        data?.api_key || data?.token || data?.access_token || data?.jwt || null;
-
-      let username = email;
-      const regex = /@/i;
-      if (regex.test(email)) {
-        username = email.split("@")[0];
-        console.log("regex passed ", username, email);
-      } else {
-        username = email;
-        email = username + "@csub.edu";
-      }
-      console.log("data", data.status);
-
-      key = 0;
-      let user;
-      if (data.status === "success") {
-        user = await checkUser(email);
-        console.log("Final email/username:", email, username);
-        if (user === undefined || user.length === 0) {
-          initDb();
-          const res = await logUserInfo(email, username);
-          console.log("New user logged:", res);
-          console.log("User created:", email, username);
-        }
-        user = await checkUser(email);
-        console.log(user);
-        console.log("Login successful, key saved." + key);
-
-        storeLogin("user", username);
-        storeLogin("email", email);
-        storeLogin("pw", password);
-
-        router.push({
-          pathname: "/(tabs)/index",
-          query: { status: "Logged In" },
-        });
-      }
-    } catch (err) {
+    }
+    /*} catch (err) {
       console.log("Login error:", err);
       Alert.alert("Login failed", err?.message || "Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    } finally {*/
+    setLoading(false);
+    //}
   };
 
   return (
@@ -157,8 +157,7 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-        </Text>
+        <Text style={styles.footerText}></Text>
       </View>
     </KeyboardAvoidingView>
   );

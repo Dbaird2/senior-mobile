@@ -2,12 +2,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
 import { getData } from "../store-login";
+import {
+  insertAuditInfo,
+  getAllAuditing,
+  deleteAuditingData,
+} from "../../../src/sqlite";
+import { router } from "expo-router";
 
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || "https://dataworks-7b7x.onrender.com";
 const GET_PROFILES_PATH = "/phone-api/profiles/get-profiles.php"; // adjust if needed
 const RENAME_PROFILES_PATH = "/phone-api/profiles/rename-profiles.php"; // adjust if needed
-const DELETE_PROFILES_PATH = "/phone-api/profiles/delete-profiles.php"; // adjust if needed
+const DELETE_PROFILES_PATH = "/phone-api/profiles/delete-profiles.php";
+const AUDIT_PROFILES_PATH = "/phone-api/profiles/get-profile-info.php";
 /*const AUDIT_PROFILES_PATH = "/phone-api/to be figured out"; // adjust if needed
  */
 
@@ -156,12 +163,87 @@ export async function deleteProfile(name) {
 }
 
 /** Audit */
-export async function auditProfile(id) {
-  const res = await fetch(`${API_BASE_URL}/api/profiles/${id}/audit`, {
+export async function auditProfile(name) {
+  let email = await getData("email");
+  email = JSON.parse(email).value;
+
+  let pw = await getData("pw");
+  pw = JSON.parse(pw).value;
+
+  console.log(name.name);
+  let profile_name = name.name.trim();
+  const res = await fetch(`${API_BASE_URL}${AUDIT_PROFILES_PATH}`, {
     method: "POST",
     headers: await authHeaders(),
+    body: JSON.stringify({
+      email: email,
+      pw: pw,
+      profile: profile_name, // existing profile name
+    }),
   });
-  return handle(res); // optional: returns job id
+  //console.log("email, pw, name:", email, pw, profile_name);
+  const text = await res.json();
+  //console.log("Auditing:", text);
+
+  if (text.status === "Ok") {
+  }
+  await deleteAuditingData();
+  //return handle(res); // optional: returns job id
+  for (const p of text.profiles) {
+    let assigned_to = "";
+    if (p.notes != null) {
+      let note_array = p.notes.split(" ");
+      let dept = note_array[0];
+      for (let i = 1; i < note_array.length; i++) {
+        assigned_to = note_array[i];
+      }
+    } else {
+      assigned_to = "N/A";
+    }
+    /*
+    console.log(
+      p.asset_tag,
+      p.asset_name,
+      assigned_to,
+      p.dept_id,
+      p.serial_num,
+      p.po,
+      p.asset_model || "N/A",
+      p.make || "N/A",
+      p.room_tag,
+      p.type2 || "N/A",
+      p.bus_unit,
+      p.status || "In Service",
+      p.date_added || "N/A",
+      p.asset_price || 0,
+      p.audit_id || 1,
+      p.asset_notes || "N/A"
+    );*/
+    await insertAuditInfo(
+      p.asset_tag,
+      p.asset_name,
+      p.dept_id,
+      p.serial_num || "N/A",
+      p.po || "N/A",
+      p.asset_model || "N/A",
+      p.make || "N/A",
+      p.room_tag,
+      p.type2 || "N/A",
+      p.bus_unit,
+      p.status || "In Service",
+      assigned_to || "N/A",
+      p.date_added || "N/A",
+      p.asset_price || 0,
+      p.audit_id || 1,
+      p.asset_notes || "N/A"
+    );
+  }
+  const audit_data = await getAllAuditing();
+  //console.log("Audit data inserted:", audit_data);
+  router.push({
+    pathname: "/(tabs)/audit",
+    query: { from: "Profiles" },
+  });
 }
 
 /** Optional: “View” other user’s profile.
