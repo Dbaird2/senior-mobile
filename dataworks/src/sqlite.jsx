@@ -37,22 +37,54 @@ export async function initDb() {
   //   console.error("Failed to set PRAGMA options:", e);
   // }
   console.log("Creating department table...");
-  try {
-    // await db.execAsync(`DROP TABLE IF EXISTS department;`);
-    // await db.execAsync(`DROP INDEX IF EXISTS idx_department_dept_id;`);
-
-    await db.execAsync(`
+  //try {
+  //await db.execAsync(`DROP TABLE IF EXISTS department;`);
+  //await db.execAsync(`DROP INDEX IF EXISTS idx_department_dept_id;`);
+  console.log("Creating auditing table...");
+  await db.execAsync(`
+      CREATE TABLE auditing (
+        id   INTEGER PRIMARY KEY AUTOINCREMENT,
+        tag  TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        dept_id TEXT,
+        serial TEXT NOT NULL,
+        po TEXT,
+        model TEXT,
+        manufacturer TEXT,
+        room_tag INTEGER,
+        type TEXT,
+        bus_unit TEXT CHECK(bus_unit IN ('BKCMP', 'BKASI', 'BKSTU', 'BKFDN', 'BKSPA')) DEFAULT 'BKCMP',
+        status TEXT,
+        assigned_to TEXT,
+        purchase_date TEXT,
+        geo_x TEXT,
+        geo_y TEXT,
+        elevation TEXT,
+        price REAL,
+        found status TEXT,
+        found_room_tag INTEGER,
+        found_building TEXT,
+        found_room_number TEXT,
+        found_timestamp TIMESTAMP,
+        audit_id INTEGER,
+        notes TEXT
+      );
+    `);
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS idx_auditing_tag ON auditing (tag);`
+  );
+  await db.execAsync(`
       CREATE TABLE IF NOT EXISTS department (
         name TEXT UMIQUE NOT NULL,
         dept_id TEXT PRIMARY KEY,
         manager TEXT
       );
     `);
-    await db.execAsync(`
+  await db.execAsync(`
       CREATE INDEX IF NOT EXISTS idx_department_dept_id ON department (dept_id);`);
-  } catch (e) {
-    console.error("DB department error:", e);
-  }
+  //} catch (e) {
+  console.error("DB department error:", e);
+  //}
   await db.execAsync(`
       CREATE TABLE IF NOT EXISTS department_cust (
         custodian TEXT,
@@ -75,7 +107,7 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_building_bldg_id ON building (bldg_id);`
   );
   console.log("Creating room table");
-  // await db.execAsync(`DROP TABLE IF EXISTS room;`);
+  await db.execAsync(`DROP TABLE IF EXISTS room;`);
   await db.execAsync(`
       CREATE TABLE IF NOT EXISTS room (
         id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +117,7 @@ export async function initDb() {
       );
     `);
   await db.execAsync(
-    `CREATE INDEX IF NOT EXISTS idx_room_id ON room (room_id);`
+    `CREATE INDEX IF NOT EXISTS idx_room_tag ON room (room_tag);`
   );
   try {
     console.log("Creating asset_table...");
@@ -124,7 +156,7 @@ export async function initDb() {
   }
   try {
     console.log("Creating auth table...");
-    // await db.execAsync(`DROP TABLE IF EXISTS auth;`);
+    await db.execAsync(`DROP TABLE IF EXISTS auth;`);
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS auth (
         id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,9 +175,11 @@ export async function initDb() {
         UNIQUE(username, email)
       );
     `);
+    console.log("Creating auth indexes...");
     await db.execAsync(
       `CREATE INDEX IF NOT EXISTS idx_auth_email ON auth (email);`
     );
+    console.log("Creating profile table...");
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS profile (
         id INTEGER PRIMARY KEY,
@@ -157,6 +191,7 @@ export async function initDb() {
         FOREIGN KEY (tag) REFERENCES asset_table(tag) ON DELETE SET NULL ON UPDATE CASCADE
       );
     `);
+    console.log("Creating profile indexes...");
     await db.execAsync(`
       CREATE INDEX IF NOT EXISTS idx_profile_tag ON profile(tag, email);
     `);
@@ -164,34 +199,10 @@ export async function initDb() {
     console.error("DB auth error:", e);
   }
 
-  await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS auditing (
-        id   INTEGER PRIMARY KEY AUTOINCREMENT,
-        tag  TEXT UNIQUE NOT NULL,
-        name TEXT NOT NULL,
-        dept_id TEXT,
-        serial TEXT NOT NULL,
-        po TEXT,
-        model TEXT,
-        manufacturer TEXT,
-        room_tag INTEGER,
-        type TEXT,
-        bus_unit TEXT CHECK(bus_unit IN ('BKCMP', 'BKASI', 'BKSTU', 'BKFDN', 'BKSPA')) DEFAULT 'BKCMP',
-        status TEXT,
-        assigned_to TEXT,
-        purchase_date TEXT,
-        geo_x TEXT,
-        geo_y TEXT,
-        elevation TEXT,
-        price REAL,
-        found_room_tag INTEGER,
-        found_building TEXT,
-        found_room_number TEXT,
-        found_timestamp TIMESTAMP DEFAULT CURRENT TIMESTAMP,
-        audit_id INTEGER,
-        notes TEXT
-      );
-    `);
+  console.log(
+    await db.execAsync("SELECT name FROM sqlite_master WHERE type='auditing';")
+  );
+
   console.log("Database initialized.");
 
   initialized = true;
@@ -280,6 +291,12 @@ export async function clearUsers() {
   return true;
 }
 
+export async function deleteAuditingData() {
+  const db = await SQLite.openDatabaseAsync("app.db");
+  db.runSync(`DELETE FROM auditing`);
+  return true;
+}
+
 export async function deleteDatabase(database = "sqlite.db") {
   console.log("DB deleteDatabase called");
   const dbPath = FileSystem.documentDirectory + database;
@@ -354,6 +371,12 @@ export async function getAllItems(limit = 50, offset = 0) {
   );
 }
 
+export async function getAllAuditing() {
+  //await initDb();
+  const db = await SQLite.openDatabaseAsync("app.db");
+  return db.getAllAsync(`SELECT * FROM auditing`, []);
+}
+
 export async function insertItem(tag, name, room_tag, serial, dept_id) {
   ////await initDb();
   const db = await SQLite.openDatabaseAsync("app.db");
@@ -418,6 +441,52 @@ export async function insertDeptRooms(room_tag, name, bldg_id) {
        name=excluded.name,
        bldg_id=excluded.bldg_id`,
     [room_tag, name, bldg_id]
+  );
+}
+
+export async function insertAuditInfo(
+  tag,
+  name,
+  dept_id,
+  serial,
+  po,
+  model,
+  manufacturer,
+  room_tag,
+  type,
+  bus_unit,
+  status,
+  assigned_to,
+  purchase_date,
+  price,
+  audit_id,
+  notes
+) {
+  //await initDb();
+  const db = await SQLite.openDatabaseAsync("app.db");
+
+  db.runAsync(
+    `INSERT INTO auditing (tag, name, dept_id, serial, po, model, manufacturer, room_tag, type, bus_unit, status, assigned_to, purchase_date, price, audit_id, notes)
+     VALUES (?, ?, ? , ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+     ON CONFLICT(tag) DO NOTHING`,
+    [
+      tag,
+      name,
+      dept_id,
+      serial,
+      po,
+      model,
+      manufacturer,
+      room_tag,
+      type,
+      bus_unit,
+      status,
+      assigned_to,
+      purchase_date,
+      price,
+      audit_id,
+      notes,
+    ]
   );
 }
 
