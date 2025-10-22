@@ -92,7 +92,7 @@ export default function LoginScreen() {
       storeLogin("pw", password);
 
       router.push({
-        pathname: "/(tabs)/audit",
+        pathname: "/",
         query: { status: "Logged In" },
       });
     }
