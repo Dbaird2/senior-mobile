@@ -32,6 +32,7 @@ export default function TabLayout() {
           ),
         }}
       />
+<<<<<<< HEAD
 
       <Tabs.Screen
         name="explore"
@@ -41,6 +42,11 @@ export default function TabLayout() {
             <IconSymbol size={28} name="paperplane.fill" color={color} />
           ),
         }}
+=======
+ <Tabs.Screen
+        name="profile"
+        options={{ title: "Profiles", headerShown: false, tabBarIcon: /* your icon */ undefined }}
+>>>>>>> origin
       />
     </Tabs>
   );

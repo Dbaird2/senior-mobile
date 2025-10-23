@@ -49,6 +49,7 @@
           "backgroundColor": "#ffffff"
         }
       ],
+<<<<<<< HEAD
       [
         "expo-barcode-scanner",
         {
@@ -61,13 +62,25 @@
           "locationAlwaysAndWhenInUsePermission": "Allow DataWorks to access your location so scans can be tagged with where they happened."
         }
       ]
+=======
+      "expo-secure-store",
+      "expo-sqlite"
+>>>>>>> origin
     ],
 
     "experiments": { "typedRoutes": true },
 
     "extra": {
       "router": {},
+<<<<<<< HEAD
       "eas": { "projectId": "8797e4f6-19c4-4f6d-99f2-0759b7075a93" }
+=======
+      "eas": {
+        "projectId": "8797e4f6-19c4-4f6d-99f2-0759b7075a93"
+      },
+      "EXPO_PUBLIC_API_BASE": "https://dataworks-7b7x.onrender.com",
+      "AUTH_REQUIRED": false
+>>>>>>> origin
     }
   }
 }
