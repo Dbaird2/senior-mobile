@@ -17,12 +17,20 @@ import { setData, toggleColumn, showColumn } from "../auditSlice";
 import { Camera, CameraView } from "expo-camera";
 import useLocation from "../../hooks/useLocation";
 
-// === NEW: super-light in-memory mock “DB”
 const MOCK = {
   doorTags: {
-    // RoomTag -> door tag record
-    "DOOR-1001": { RoomTag: "DOOR-1001", RoomLocation: "101A", BuildingName: "HQ East", assets: [] },
-    "DOOR-2005": { RoomTag: "DOOR-2005", RoomLocation: "2F West", BuildingName: "HQ West", assets: [] },
+    "DOOR-1001": {
+      RoomTag: "DOOR-1001",
+      RoomLocation: "101A",
+      BuildingName: "HQ East",
+      assets: [],
+    },
+    "DOOR-2005": {
+      RoomTag: "DOOR-2005",
+      RoomLocation: "2F West",
+      BuildingName: "HQ West",
+      assets: [],
+    },
   },
   assetsByCode: {
     "AST-0001": { AssetTag: "AST-0001", Description: "Office Chair", Serial: "CH-9931" },
@@ -47,9 +55,10 @@ export default function AuditScreen() {
 
   const { getCurrentLocation } = useLocation();
 
-  // === NEW: audit working state
+  // === audit working state
   const [currentDoor, setCurrentDoor] = useState(null); // { RoomTag, RoomLocation, BuildingName, assets[] }
   const [pickedAssets, setPickedAssets] = useState([]); // array of asset objects
+  const [scanIntent, setScanIntent] = useState("asset"); // "door" | "asset"
 
   const COL_WIDTH = 140;
   const ROW_HEIGHT = 40;
@@ -74,7 +83,7 @@ export default function AuditScreen() {
   );
 
   // ====== CAMERA & SCAN ======
-  const requestPermissionAndScan = async () => {
+  const requestPermissionAndScan = async (intent = "asset") => {
     if (Platform.OS === "web") {
       alert("Scanning isn’t available on web.");
       return;
@@ -83,44 +92,23 @@ export default function AuditScreen() {
       const { status } = await Camera.requestCameraPermissionsAsync();
       const granted = status === "granted";
       setHasPermission(granted);
-      if (granted) setScanning(true);
+      if (granted) {
+        setScanIntent(intent);
+        setScanning(true);
+      }
     } catch (e) {
       console.warn("Camera permission error:", e);
       alert("Could not access the camera. Check app permissions.");
     }
   };
 
-  // === NEW: when we get a scan, interpret it as a door (first) or asset (subsequent)
-  const processScannedString = (raw) => {
-    // VERY simple heuristic for demo: if we don't have a door yet, treat first scan as door
-    if (!currentDoor) {
-      // look up in mock DB, or create a placeholder door tag
-      const door =
-        MOCK.doorTags[raw] ||
-        (MOCK.doorTags[raw] = {
-          RoomTag: raw,
-          RoomLocation: "Unknown",
-          BuildingName: "Unknown",
-          assets: [],
-        });
-      setCurrentDoor({ ...door });
-      return { kind: "door", value: door };
-    }
-
-    // otherwise treat as an asset
-    const asset =
-      MOCK.assetsByCode[raw] ||
-      // create a light asset stub if not in mock DB
-      (MOCK.assetsByCode[raw] = {
-        AssetTag: raw,
-        Description: "Mock Asset",
-        Serial: `SN-${String(raw).slice(-4)}`,
-      });
-
-    setPickedAssets((prev) =>
-      prev.some((a) => a.AssetTag === asset.AssetTag) ? prev : [...prev, asset]
-    );
-    return { kind: "asset", value: asset };
+  const formatGeoToRoomLocation = (coords) => {
+    if (!coords) return "Unknown";
+    const lat = coords.latitude?.toFixed(6);
+    const lon = coords.longitude?.toFixed(6);
+    const alt =
+      typeof coords.altitude === "number" ? coords.altitude.toFixed(1) : "n/a";
+    return `${lat}, ${lon}, ${alt}`;
   };
 
   const handleBarcodeScanned = async ({ type, data }) => {
@@ -130,7 +118,7 @@ export default function AuditScreen() {
 
     const payload = {
       type,
-      data,
+      data: String(data),
       location: loc?.coords
         ? {
             latitude: loc.coords.latitude,
@@ -143,23 +131,80 @@ export default function AuditScreen() {
     };
     setScannedData(payload);
 
-    const res = processScannedString(String(data));
+    // honor intent: door vs asset
+    if (scanIntent === "door") {
+      const tag = payload.data;
+
+      // find or create door
+      const existing =
+        MOCK.doorTags[tag] ||
+        (MOCK.doorTags[tag] = {
+          RoomTag: tag,
+          RoomLocation: "Unknown",
+          BuildingName: "Unknown",
+          assets: [],
+        });
+
+      // write geolocation into RoomLocation
+      const newRoomLocation = formatGeoToRoomLocation(payload.location);
+      MOCK.doorTags[tag].RoomLocation = newRoomLocation;
+
+      // set as current door
+      const current = { ...MOCK.doorTags[tag] };
+      setCurrentDoor(current);
+
+      // load its assets into the working list
+      const loadedAssets = (current.assets || []).map((assetTag) => {
+        return (
+          MOCK.assetsByCode[assetTag] ||
+          (MOCK.assetsByCode[assetTag] = {
+            AssetTag: assetTag,
+            Description: "Mock Asset",
+            Serial: `SN-${String(assetTag).slice(-4)}`,
+          })
+        );
+      });
+      setPickedAssets(loadedAssets);
+
+      const where = payload.location
+        ? ` @ (${payload.location.latitude.toFixed(6)}, ${payload.location.longitude.toFixed(6)})`
+        : "";
+      alert(
+        `Door selected: ${tag}${where}\nRoomLocation updated to: ${newRoomLocation}`
+      );
+      return;
+    }
+
+    // asset intent
+    if (!currentDoor) {
+      alert("Scan a door tag first.");
+      return;
+    }
+
+    const code = payload.data;
+    const asset =
+      MOCK.assetsByCode[code] ||
+      (MOCK.assetsByCode[code] = {
+        AssetTag: code,
+        Description: "Mock Asset",
+        Serial: `SN-${String(code).slice(-4)}`,
+      });
+
+    setPickedAssets((prev) =>
+      prev.some((a) => a.AssetTag === asset.AssetTag) ? prev : [...prev, asset]
+    );
 
     const where = payload.location
       ? ` @ (${payload.location.latitude.toFixed(6)}, ${payload.location.longitude.toFixed(6)})`
       : "";
-    const what =
-      res.kind === "door"
-        ? `Door tag set: ${res.value.RoomTag}`
-        : `Asset added: ${res.value.AssetTag}`;
-    alert(`${what}${where}`);
+    alert(`Asset added: ${asset.AssetTag}${where}`);
   };
 
-  // ====== NEW: remove asset from the working list
+  // remove asset from the working list
   const removeAsset = (assetTag) =>
     setPickedAssets((prev) => prev.filter((a) => a.AssetTag !== assetTag));
 
-  // ====== NEW: save work → write into mock DB under the door tag, then clear working list
+  // persist working list into the door tag
   const saveWork = () => {
     if (!currentDoor) {
       alert("Scan a door tag first.");
@@ -171,8 +216,7 @@ export default function AuditScreen() {
       `Saved ${ids.length} asset${ids.length === 1 ? "" : "s"} to ${currentDoor.RoomTag}.`
     );
     setPickedAssets([]);
-    // keep door selected (often you’ll keep scanning more), or reset if you prefer:
-    // setCurrentDoor(null);
+    // keep the door selected so you can keep adding later
   };
 
   // Render full-screen camera when scanning
@@ -216,6 +260,8 @@ export default function AuditScreen() {
           }}
           style={StyleSheet.absoluteFillObject}
         />
+
+        {/* Cancel button overlay */}
         <View style={styles.cancelContainer}>
           <Pressable
             style={styles.cancelButton}
@@ -229,7 +275,7 @@ export default function AuditScreen() {
     );
   }
 
-  // ====== PICK EXCEL (unchanged, trimmed) ======
+  // ====== PICK EXCEL ======
   const pickExcel = async () => {
     setError("");
     setLoading(true);
@@ -339,7 +385,7 @@ export default function AuditScreen() {
     </View>
   );
 
-  // helper to format the location output exactly as requested
+  // helper to show last scan info
   const renderLastScanned = () => {
     if (!scannedData) return null;
     const locText = scannedData.location
@@ -356,15 +402,20 @@ export default function AuditScreen() {
     );
   };
 
-  // === NEW: small UI for current door + assets with red X and Save button
   const renderAuditTray = () => (
     <View style={styles.auditTray}>
       <Text style={styles.trayTitle}>Current Door</Text>
       {currentDoor ? (
         <View style={styles.doorCard}>
-          <Text style={styles.doorLine}><Text style={styles.bold}>RoomTag:</Text> {currentDoor.RoomTag}</Text>
-          <Text style={styles.doorLine}><Text style={styles.bold}>RoomLocation:</Text> {currentDoor.RoomLocation}</Text>
-          <Text style={styles.doorLine}><Text style={styles.bold}>BuildingName:</Text> {currentDoor.BuildingName}</Text>
+          <Text style={styles.doorLine}>
+            <Text style={styles.bold}>RoomTag:</Text> {currentDoor.RoomTag}
+          </Text>
+          <Text style={styles.doorLine}>
+            <Text style={styles.bold}>RoomLocation:</Text> {currentDoor.RoomLocation}
+          </Text>
+          <Text style={styles.doorLine}>
+            <Text style={styles.bold}>BuildingName:</Text> {currentDoor.BuildingName}
+          </Text>
         </View>
       ) : (
         <Text style={styles.trayHint}>Scan a door tag to start.</Text>
@@ -412,12 +463,20 @@ export default function AuditScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Audit</Text>
 
-      {/* Scan */}
+      {/* Scan DOOR */}
       <Pressable
         style={[styles.button, { marginBottom: 10 }]}
-        onPress={requestPermissionAndScan}
+        onPress={() => requestPermissionAndScan("door")}
       >
-        <Text style={styles.buttonText}>Scan QR / Barcode</Text>
+        <Text style={styles.buttonText}>Scan Door Tag</Text>
+      </Pressable>
+
+      {/* Scan ASSET */}
+      <Pressable
+        style={[styles.button, { marginBottom: 10 }]}
+        onPress={() => requestPermissionAndScan("asset")}
+      >
+        <Text style={styles.buttonText}>Scan Asset</Text>
       </Pressable>
 
       {/* Upload */}
@@ -427,7 +486,7 @@ export default function AuditScreen() {
 
       {renderLastScanned()}
 
-      {/* === NEW: the working tray */}
+      {/* Working tray */}
       {renderAuditTray()}
 
       {loading && <ActivityIndicator size="large" />}
@@ -557,7 +616,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // === NEW: audit tray + red X list
+  // audit tray + red X list
   auditTray: {
     marginTop: 16,
     borderWidth: 1,
