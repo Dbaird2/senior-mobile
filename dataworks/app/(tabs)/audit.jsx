@@ -17,6 +17,10 @@ import { setData, toggleColumn, showColumn } from "../auditSlice";
 import { Camera, CameraView } from "expo-camera";
 import useLocation from "../../hooks/useLocation";
 
+/** =======================
+ *  SUPER-LIGHT MOCK “DB”
+ *  Replace these reads/writes with your API/Redux later.
+ *  ======================= */
 const MOCK = {
   doorTags: {
     "DOOR-1001": {
@@ -42,13 +46,7 @@ const MOCK = {
 
 export default function AuditScreen() {
   const dispatch = useDispatch();
-<<<<<<< HEAD
   const { fileInfo, rows, columns, hiddenCols } = useSelector((s) => s.audit);
-=======
-
-  // pull redux state (including byHeader JSON)
-  const { fileInfo, rows, columns, hiddenCols } = useSelector((state) => state.audit);
->>>>>>> origin
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -61,10 +59,9 @@ export default function AuditScreen() {
 
   const { getCurrentLocation } = useLocation();
 
-  // === audit working state
+  // audit working state
   const [currentDoor, setCurrentDoor] = useState(null); // { RoomTag, RoomLocation, BuildingName, assets[] }
   const [pickedAssets, setPickedAssets] = useState([]); // array of asset objects
-  const [scanIntent, setScanIntent] = useState("asset"); // "door" | "asset"
 
   const COL_WIDTH = 140;
   const ROW_HEIGHT = 40;
@@ -89,7 +86,7 @@ export default function AuditScreen() {
   );
 
   // ====== CAMERA & SCAN ======
-  const requestPermissionAndScan = async (intent = "asset") => {
+  const requestPermissionAndScan = async () => {
     if (Platform.OS === "web") {
       alert("Scanning isn’t available on web.");
       return;
@@ -98,10 +95,7 @@ export default function AuditScreen() {
       const { status } = await Camera.requestCameraPermissionsAsync();
       const granted = status === "granted";
       setHasPermission(granted);
-      if (granted) {
-        setScanIntent(intent);
-        setScanning(true);
-      }
+      if (granted) setScanning(true);
     } catch (e) {
       console.warn("Camera permission error:", e);
       alert("Could not access the camera. Check app permissions.");
@@ -137,12 +131,12 @@ export default function AuditScreen() {
     };
     setScannedData(payload);
 
-    // honor intent: door vs asset
-    if (scanIntent === "door") {
+    // If no door is selected, treat as DOOR scan; otherwise treat as ASSET scan
+    if (!currentDoor) {
       const tag = payload.data;
 
-      // find or create door
-      const existing =
+      // find or create the door
+      const door =
         MOCK.doorTags[tag] ||
         (MOCK.doorTags[tag] = {
           RoomTag: tag,
@@ -181,12 +175,7 @@ export default function AuditScreen() {
       return;
     }
 
-    // asset intent
-    if (!currentDoor) {
-      alert("Scan a door tag first.");
-      return;
-    }
-
+    // asset scan (door already selected)
     const code = payload.data;
     const asset =
       MOCK.assetsByCode[code] ||
@@ -221,8 +210,9 @@ export default function AuditScreen() {
     alert(
       `Saved ${ids.length} asset${ids.length === 1 ? "" : "s"} to ${currentDoor.RoomTag}.`
     );
+    // RESET so the next scan is a DOOR tag
     setPickedAssets([]);
-    // keep the door selected so you can keep adding later
+    setCurrentDoor(null);
   };
 
   // Render full-screen camera when scanning
@@ -424,7 +414,7 @@ export default function AuditScreen() {
           </Text>
         </View>
       ) : (
-        <Text style={styles.trayHint}>Scan a door tag to start.</Text>
+        <Text style={styles.trayHint}>Scan a door tag to start. While a door is selected, scans are treated as assets.</Text>
       )}
 
       <Text style={[styles.trayTitle, { marginTop: 12 }]}>Scanned Assets</Text>
@@ -469,20 +459,12 @@ export default function AuditScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Audit</Text>
 
-      {/* Scan DOOR */}
+      {/* Single SCAN button */}
       <Pressable
         style={[styles.button, { marginBottom: 10 }]}
-        onPress={() => requestPermissionAndScan("door")}
+        onPress={requestPermissionAndScan}
       >
-        <Text style={styles.buttonText}>Scan Door Tag</Text>
-      </Pressable>
-
-      {/* Scan ASSET */}
-      <Pressable
-        style={[styles.button, { marginBottom: 10 }]}
-        onPress={() => requestPermissionAndScan("asset")}
-      >
-        <Text style={styles.buttonText}>Scan Asset</Text>
+        <Text style={styles.buttonText}>Scan QR / Barcode</Text>
       </Pressable>
 
       {/* Upload */}

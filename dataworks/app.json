@@ -8,36 +8,22 @@
     "scheme": "dataworks",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.dbaird2.dataworks",
-      "infoPlist": {
-        "NSCameraUsageDescription": "We use the camera to scan barcodes and QR codes.",
-        "NSLocationWhenInUseUsageDescription": "Allow DataWorks to attach your location to scanned items."
-      }
+      "supportsTablet": true
     },
-
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.dbaird2.dataworks",
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
-      ]
+      "package": "com.dbaird2.dataworks"
     },
-
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -49,39 +35,19 @@
           "backgroundColor": "#ffffff"
         }
       ],
-<<<<<<< HEAD
-      [
-        "expo-barcode-scanner",
-        {
-          "cameraPermission": "Allow the app to use your camera to scan barcodes and QR codes."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Allow DataWorks to access your location so scans can be tagged with where they happened."
-        }
-      ]
-=======
       "expo-secure-store",
       "expo-sqlite"
->>>>>>> origin
     ],
-
-    "experiments": { "typedRoutes": true },
-
+    "experiments": {
+      "typedRoutes": true
+    },
     "extra": {
       "router": {},
-<<<<<<< HEAD
-      "eas": { "projectId": "8797e4f6-19c4-4f6d-99f2-0759b7075a93" }
-=======
       "eas": {
         "projectId": "8797e4f6-19c4-4f6d-99f2-0759b7075a93"
       },
       "EXPO_PUBLIC_API_BASE": "https://dataworks-7b7x.onrender.com",
       "AUTH_REQUIRED": false
->>>>>>> origin
     }
   }
 }
-
