@@ -1,15 +1,15 @@
 // src/db.js
-import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system";
+import * as SQLite from "expo-sqlite";
 
 let initialized = false;
 let initPromise = null;
 let dbInstance = null;
 
 async function getDb() {
-  console.log("DB getDb called");
+  // console.log("DB getDb called");
   if (!dbInstance) {
-    console.log("Opening database...");
+    // console.log("Opening database...");
     dbInstance = await SQLite.openDatabaseAsync("app.db");
   }
   return dbInstance;
@@ -19,27 +19,27 @@ async function getScalarCount(sql, params = []) {
   await initDb();
   const db = await getDb();
   const rows = await db.getAllAsync(sql, params);
-  console.log(rows);
+  // console.log(rows);
   if (!rows || rows.length === 0) return 0;
   const key = Object.keys(rows[0])[0];
   const result = Number(rows[0][key] ?? 0);
-  console.log("scalar result", result);
+  // console.log("scalar result", result);
 
   return result;
 }
 
 export async function initDb() {
-  console.log("DB initDb called");
+  // console.log("DB initDb called");
 
   // ✅ If already initializing, wait for that to complete
   if (initPromise) {
-    console.log("Already initializing, waiting...");
+    // console.log("Already initializing, waiting...");
     return initPromise;
   }
 
   // ✅ If already initialized, return immediately
   if (initialized) {
-    console.log("Already initialized");
+    // console.log("Already initialized");
     return;
   }
 
@@ -51,8 +51,8 @@ export async function initDb() {
         throw new Error("Database initialization failed!");
       }
 
-      console.log("Database opened:", db);
-      console.log("DB initializing schema...");
+      // console.log("Database opened:", db);
+      // console.log("DB initializing schema...");
       await db.execAsync(`
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
@@ -60,7 +60,7 @@ export async function initDb() {
         PRAGMA busy_timeout = 4000;  -- wait up to 4s instead of hanging forever
       `);
       // Your table creation code...
-      console.log("Creating department table...");
+      // console.log("Creating department table...");
       await db.execAsync(`
           CREATE TABLE IF NOT EXISTS department (
             name TEXT UNIQUE NOT NULL,
@@ -80,7 +80,7 @@ export async function initDb() {
           );
         `);
 
-      console.log("Creating building table");
+      // console.log("Creating building table");
       await db.execAsync(`
           CREATE TABLE IF NOT EXISTS building (
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +92,7 @@ export async function initDb() {
         `CREATE INDEX IF NOT EXISTS idx_building_bldg_id ON building (bldg_id);`
       );
 
-      console.log("Creating room table");
+      // console.log("Creating room table");
       await db.execAsync(`
           CREATE TABLE IF NOT EXISTS room (
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +105,7 @@ export async function initDb() {
         `CREATE INDEX IF NOT EXISTS idx_room_tag ON room (room_tag);`
       );
 
-      console.log("Creating asset_table...");
+      // console.log("Creating asset_table...");
       await db.execAsync(`
           CREATE TABLE IF NOT EXISTS asset_table (
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,7 +136,7 @@ export async function initDb() {
         `CREATE INDEX IF NOT EXISTS idx_asset_name ON asset_table (name);`
       );
 
-      console.log("Creating auth table...");
+      // console.log("Creating auth table...");
       await db.execAsync(`
           CREATE TABLE IF NOT EXISTS auth (
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -159,7 +159,7 @@ export async function initDb() {
         `CREATE INDEX IF NOT EXISTS idx_auth_email ON auth (email);`
       );
 
-      console.log("Creating profile table...");
+      // console.log("Creating profile table...");
       await db.execAsync(`
           CREATE TABLE IF NOT EXISTS profile (
             id INTEGER PRIMARY KEY,
@@ -175,7 +175,7 @@ export async function initDb() {
           CREATE INDEX IF NOT EXISTS idx_profile_tag ON profile(tag, email);
         `);
 
-      console.log("Creating auditing table...");
+      // console.log("Creating auditing table...");
       await db.execAsync(`
           CREATE TABLE IF NOT EXISTS auditing (
             id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -206,7 +206,7 @@ export async function initDb() {
           );
         `);
 
-      console.log("Database initialized.");
+      // console.log("Database initialized.");
       initialized = true;
     } catch (error) {
       console.error("Database initialization error:", error);
@@ -220,7 +220,7 @@ export async function initDb() {
 
 // Search items by tag or name (basic LIKE)
 export async function checkUser(username) {
-  console.log("DB checkUser called with", username);
+  // console.log("DB checkUser called with", username);
   //await initDb();
   //initDb();
   const db = await getDb();
@@ -236,7 +236,7 @@ export async function checkUser(username) {
 }
 
 export async function logUserInfo(email, username) {
-  console.log("DB logUserInfo called with", email, username);
+  // console.log("DB logUserInfo called with", email, username);
   //await initDb();
   //initDb();
   const db = await getDb();
@@ -249,7 +249,7 @@ export async function logUserInfo(email, username) {
 }
 
 export async function listTables() {
-  console.log("DB listTables called");
+  // console.log("DB listTables called");
   const db = await getDb();
 
   try {
@@ -272,7 +272,7 @@ export async function getItemCount() {
 export async function getBldgCount() {
   //await initDb();
   const count = await getScalarCount("SELECT COUNT(*) FROM building");
-  console.log("getBldgCount return: ", count);
+  // console.log("getBldgCount return: ", count);
   return count;
 }
 export async function getDeptCount() {
@@ -292,22 +292,22 @@ export async function getRoomCount() {
 }
 
 export async function clearUsers() {
-  console.log("DB clearUsers called");
+  // console.log("DB clearUsers called");
   const db = await getDb();
 
   // await initDb();
   db.runSync(`DELETE FROM auth`);
   db.runSync(`DELETE FROM sqlite_sequence WHERE name='auth'`);
-  console.log("All users cleared.");
+  // console.log("All users cleared.");
   return true;
 }
 
 export async function deleteDatabase(database = "sqlite.db") {
-  console.log("DB deleteDatabase called");
+  // console.log("DB deleteDatabase called");
   const dbPath = FileSystem.documentDirectory + database;
   try {
     await FileSystem.deleteAsync(dbPath, { idempotent: true });
-    console.log("Database deleted successfully");
+    // console.log("Database deleted successfully");
   } catch (error) {
     console.error("Error deleting database:", error);
   }
@@ -438,7 +438,7 @@ function sanitizeLimitOffset(limit = 30, offset = 0) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function getAllItems(limit = 30, offset = 0) {
-  console.log("DB getAllItems called with", limit, offset);
+  // console.log("DB getAllItems called with", limit, offset);
   const db = await getDb();
   const { lim, off } = sanitizeLimitOffset(limit, offset);
 
@@ -448,12 +448,12 @@ export async function getAllItems(limit = 30, offset = 0) {
       ORDER BY tag DESC
       LIMIT ${lim} OFFSET ${off};
     `;
-  console.log("Executing SQL:", sql);
-  console.log("DB instance:", db);
+  // console.log("Executing SQL:", sql);
+  // console.log("DB instance:", db);
 
   const rows = await db.getAllAsync(sql);
   //await sleep(1000);
-  console.log("Fetched items:", rows.length);
+  // console.log("Fetched items:", rows.length);
   //await db.closeAsync();
   return rows ?? [];
 }
@@ -463,16 +463,6 @@ export async function insertItem(tag, name, room_tag, serial, dept_id) {
   //const db = await SQLite.openDatabaseAsync("app.db");
   await initDb();
   const db = await getDb();
-
-  await db.runAsync(
-    `INSERT INTO asset_table (tag, name, room_tag, serial, dept_id)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(tag) DO UPDATE SET
-        name=excluded.name,
-        room_tag=excluded.room_tag,
-        serial=excluded.serial`,
-
-  const db = await SQLite.openDatabaseAsync("app.db");
 
   db.runAsync(
     `INSERT INTO asset_table (tag, name, room_tag, serial, dept_id)
@@ -534,7 +524,7 @@ export async function insertDeptRooms(room_tag, name, bldg_id) {
   await initDb();
   const db = await getDb();
   /* do inserts here */
-  //console.log(room_tag, name, bldg_id);
+  //// console.log(room_tag, name, bldg_id);
   await db.runAsync(
     `INSERT INTO room (room_tag, name, bldg_id)
         VALUES (?, ?, ?);`,

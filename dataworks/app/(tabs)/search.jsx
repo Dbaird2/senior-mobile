@@ -46,7 +46,7 @@ export default function SearchAssetsScreen() {
     return () => clearTimeout(t);
   }, []);
   useEffect(() => {
-    console.log("Search Params: ", resultsParam);
+    // console.log("Search Params: ", resultsParam);
     let alive = true;
 
     const run = async () => {
@@ -58,7 +58,7 @@ export default function SearchAssetsScreen() {
 
       if (q.length >= 3 || q.length === 0) {
         if (value === "asset" || value === null) {
-          console.log("Searching items with query:", q, limit, skip);
+          // console.log("Searching items with query:", q, limit, skip);
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-asset-offset.php",
             {
@@ -70,7 +70,7 @@ export default function SearchAssetsScreen() {
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
         } else if (value === "department") {
-          console.log("Searching departments with query:", q, limit, skip);
+          // console.log("Searching departments with query:", q, limit, skip);
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-dept-offset.php",
             {
@@ -81,9 +81,9 @@ export default function SearchAssetsScreen() {
           );
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
-          console.log("Fetched departments length:", results.current);
+          // console.log("Fetched departments length:", results.current);
         } else if (value === "building") {
-          console.log("Searching buildings with query:", q);
+          // console.log("Searching buildings with query:", q);
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-bldg-offset.php",
             {
@@ -94,13 +94,13 @@ export default function SearchAssetsScreen() {
           );
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
-          console.log("Fetched buildings length:", results.current);
+          // console.log("Fetched buildings length:", results.current);
         }
 
         if (!alive) return;
-        console.log(results.current);
-        console.log("In Run Function: ", results.current.length);
-        console.log("Setting refresh key", refreshKey);
+        // console.log(results.current);
+        // console.log("In Run Function: ", results.current.length);
+        // console.log("Setting refresh key", refreshKey);
       }
       setRefreshKey((prev) => prev + 1);
       isLoadingRef.current = false;

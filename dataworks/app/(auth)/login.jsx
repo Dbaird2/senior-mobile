@@ -40,7 +40,7 @@ export default function LoginScreen() {
 
     setLoading(true);
     //try {
-    console.log("Existing stored user/email:", email);
+    // console.log("Existing stored user/email:", email);
     const url = "https://dataworks-7b7x.onrender.com";
     const res = await fetch(`${url}${LOGIN_PATH}`, {
       method: "POST",
@@ -65,27 +65,27 @@ export default function LoginScreen() {
     const regex = /@/i;
     if (regex.test(email)) {
       username = email.split("@")[0];
-      console.log("regex passed ", username, email);
+      // console.log("regex passed ", username, email);
     } else {
       username = email;
       email = username + "@csub.edu";
     }
-    console.log("data", data.status);
+    // console.log("data", data.status);
 
     key = 0;
     let user;
     if (data.status === "success") {
       user = await checkUser(email);
-      console.log("Final email/username:", email, username);
+      // console.log("Final email/username:", email, username);
       if (user === undefined || user.length === 0) {
         initDb();
         const res = await logUserInfo(email, username);
-        console.log("New user logged:", res);
-        console.log("User created:", email, username);
+        // console.log("New user logged:", res);
+        // console.log("User created:", email, username);
       }
       user = await checkUser(email);
-      console.log(user);
-      console.log("Login successful, key saved." + key);
+      // console.log(user);
+      // console.log("Login successful, key saved." + key);
 
       storeLogin("user", username);
       storeLogin("email", email);
@@ -97,7 +97,7 @@ export default function LoginScreen() {
       });
     }
     /*} catch (err) {
-      console.log("Login error:", err);
+      // console.log("Login error:", err);
       Alert.alert("Login failed", err?.message || "Please try again.");
     } finally {*/
     setLoading(false);
