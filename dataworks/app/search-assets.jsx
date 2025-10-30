@@ -56,52 +56,51 @@ export default function SearchAssetsScreen() {
       const skip = offset;
       const q = (query || "").trim();
 
-      if (q.length >= 3 || q.length === 0) {
-        if (value === "asset" || value === null) {
-          console.log("Searching items with query:", q, limit, skip);
-          const assetsRes = await fetch(
-            "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-asset-offset.php",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q }),
-            }
-          );
-          const assetsJson = await assetsRes.json();
-          results.current = assetsJson?.data || [];
-        } else if (value === "department") {
-          console.log("Searching departments with query:", q, limit, skip);
-          const assetsRes = await fetch(
-            "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-dept-offset.php",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q }),
-            }
-          );
-          const assetsJson = await assetsRes.json();
-          results.current = assetsJson?.data || [];
-          console.log("Fetched departments length:", results.current);
-        } else if (value === "building") {
-          console.log("Searching buildings with query:", q);
-          const assetsRes = await fetch(
-            "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-bldg-offset.php",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q }),
-            }
-          );
-          const assetsJson = await assetsRes.json();
-          results.current = assetsJson?.data || [];
-          console.log("Fetched buildings length:", results.current);
-        }
-
-        if (!alive) return;
-        console.log(results.current);
-        console.log("In Run Function: ", results.current.length);
-        console.log("Setting refresh key", refreshKey);
+      if (value === "asset" || value === null) {
+        console.log("Searching items with query:", q, limit, skip);
+        const assetsRes = await fetch(
+          "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-asset-offset.php",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offset: skip, limit: limit, search: q }),
+          }
+        );
+        const assetsJson = await assetsRes.json();
+        results.current = assetsJson?.data || [];
+      } else if (value === "department") {
+        console.log("Searching departments with query:", q, limit, skip);
+        const assetsRes = await fetch(
+          "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-dept-offset.php",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offset: skip, limit: limit, search: q }),
+          }
+        );
+        const assetsJson = await assetsRes.json();
+        results.current = assetsJson?.data || [];
+        console.log("Fetched departments length:", results.current);
+      } else if (value === "building") {
+        console.log("Searching buildings with query:", q);
+        const assetsRes = await fetch(
+          "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-bldg-offset.php",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offset: skip, limit: limit, search: q }),
+          }
+        );
+        const assetsJson = await assetsRes.json();
+        results.current = assetsJson?.data || [];
+        console.log("Fetched buildings length:", results.current);
       }
+
+      if (!alive) return;
+      console.log(results.current);
+      console.log("In Run Function: ", results.current.length);
+      console.log("Setting refresh key", refreshKey);
+
       setRefreshKey((prev) => prev + 1);
       isLoadingRef.current = false;
 
@@ -136,7 +135,7 @@ export default function SearchAssetsScreen() {
       ]}
     >
       <Text style={styles.rowText}>
-        {item.tag} - {item?.name} - {item?.serial} - {item?.dept_id}
+        {item.tag} — {item?.name} - {item?.room_tag} - {item?.serial}
       </Text>
     </View>
   );
@@ -149,29 +148,22 @@ export default function SearchAssetsScreen() {
     </View>
   );
 
-  const renderDept = ({ item }) => {
-    const cleanCustodian = String(item?.custodian)
-      .replace(/[\[\]{}"]/g, "")
-      .trim();
-
-    return (
-      <View
-        style={[
-          styles.row,
-          selected &&
-          (item.tag === selected?.tag || item.dept_id === selected?.dept_id)
-            ? styles.rowActive
-            : null,
-        ]}
-      >
-        <Text style={styles.rowText}>
-          {item?.dept_id} — {item?.dept_name} - {cleanCustodian} -{" "}
-          {item?.dept_manager}
-        </Text>
-      </View>
-    );
-  };
-
+  const renderDept = ({ item }) => (
+    <View
+      style={[
+        styles.row,
+        selected &&
+        (item.tag === selected?.tag || item.dept_id === selected?.dept_id)
+          ? styles.rowActive
+          : null,
+      ]}
+    >
+      <Text style={styles.rowText}>
+        {item?.dept_id} — {item?.dept_name} -{" "}
+        {item?.custodian.replace(/{|}|"/g, "")} - {item?.dept_manager}
+      </Text>
+    </View>
+  );
   const checkSearchType = ({ item }) => {
     if (value === "building") {
       return renderBuilding({ item });
