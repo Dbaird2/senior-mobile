@@ -471,6 +471,16 @@ export async function insertItem(tag, name, room_tag, serial, dept_id) {
         name=excluded.name,
         room_tag=excluded.room_tag,
         serial=excluded.serial`,
+
+  const db = await SQLite.openDatabaseAsync("app.db");
+
+  db.runAsync(
+    `INSERT INTO asset_table (tag, name, room_tag, serial, dept_id)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(tag) DO UPDATE SET
+       name=excluded.name,
+       room_tag=excluded.room_tag,
+       serial=excluded.serial`,
     [tag, name, room_tag, serial, dept_id]
   );
 }

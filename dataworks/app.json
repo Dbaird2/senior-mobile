@@ -34,7 +34,9 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true
@@ -43,7 +45,9 @@
       "router": {},
       "eas": {
         "projectId": "8797e4f6-19c4-4f6d-99f2-0759b7075a93"
-      }
+      },
+      "EXPO_PUBLIC_API_BASE": "https://dataworks-7b7x.onrender.com",
+      "AUTH_REQUIRED": false
     }
   }
 }
