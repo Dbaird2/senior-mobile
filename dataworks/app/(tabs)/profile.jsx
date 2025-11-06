@@ -52,7 +52,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     (async () => {
       try {
-        console.log("Loading...", count);
+        // console.log("Loading...", count);
         const [mine, other] = await Promise.all([getMyProfiles()]);
         setMyProfiles(mine);
         setOthers(other || []);
@@ -68,7 +68,7 @@ export default function ProfileScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      console.log("Refreshing...", count);
+      // console.log("Refreshing...", count);
       const [mine, other] = await Promise.all([getMyProfiles()]);
       setMyProfiles(mine);
       setOthers(other);
@@ -274,7 +274,7 @@ export default function ProfileScreen() {
                   setOthers((prev) => prev.filter((p) => p.id !== item.id));
                   count++;
                   setMyProfiles("");
-                  console.log(count);
+                  // console.log(count);
                 } catch (err) {
                   console.error(err);
                   Alert.alert("Error", "Delete failed.");
@@ -638,7 +638,7 @@ const styles = StyleSheet.create({
 //     (async () => {
 //       try {
 //         //setLoading(true);
-//         console.log("Loading...", count);
+//         // console.log("Loading...", count);
 //         const [mine, other] = await Promise.all([
 //           getMyProfiles(),
 //           //getOtherProfiles(),
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
 //   const onRefresh = useCallback(async () => {
 //     setRefreshing(true);
 //     try {
-//       console.log("Refreshing...", count);
+//       // console.log("Refreshing...", count);
 //       const [mine, other] = await Promise.all([
 //         getMyProfiles(),
 //         //getOtherProfiles(),
@@ -689,15 +689,15 @@ const styles = StyleSheet.create({
 //   const handleRename = async (currentName) => {
 //     // Simple inline rename via prompt-style Alert
 //     // let oldName = currentName;
-//     // console.log("New name:", newName);
+//     // // console.log("New name:", newName);
 //     // let newNameTrimmed = newName.trim();
 //     // if (!newNameTrimmed || newNameTrimmed === oldName) return;
-//     // console.log("Renaming profile:", oldName);
+//     // // console.log("Renaming profile:", oldName);
 //     // renameProfile(oldName, newName);
 //     // setNewName("");
 //     // count++;
 //     // setMyProfiles("");
-//     // console.log(count);
+//     // // console.log(count);
 //     const newNameTrimmed = newName.trim();
 //     if (!newNameTrimmed || newNameTrimmed === currentName) return;
 //     try {
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
 //                   setOthers((prev) => prev.filter((p) => p.id !== item.id));
 //                   count++;
 //                   setMyProfiles("");
-//                   console.log(count);
+//                   // console.log(count);
 //                 } catch (err) {
 //                   console.error(err);
 //                   Alert.alert("Error", "Delete failed.");
