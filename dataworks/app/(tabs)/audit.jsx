@@ -46,7 +46,13 @@ const MOCK = {
 
 export default function AuditScreen() {
   const dispatch = useDispatch();
+<<<<<<< HEAD
   const { fileInfo, rows, columns, hiddenCols } = useSelector((s) => s.audit);
+=======
+
+  // pull redux state (including byHeader JSON)
+  const { fileInfo, rows, columns, hiddenCols } = useSelector((state) => state.audit);
+>>>>>>> 944cd75 (Login page)
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
