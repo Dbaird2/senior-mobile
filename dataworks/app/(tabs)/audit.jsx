@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+"use client";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,86 +7,60 @@ import {
   ActivityIndicator,
   FlatList,
   StyleSheet,
-  ScrollView,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as XLSX from "xlsx";
 import { useDispatch, useSelector } from "react-redux";
-import { setData, toggleColumn, showColumn } from "../auditSlice";
+import { setData } from "../auditSlice";
 import { Camera, CameraView } from "expo-camera";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useLocation from "../../hooks/useLocation";
+import * as SQLite from "expo-sqlite";
+// ✅ keep sqlite import name/path exactly:
+import { initDb, getItem } from "../../src/sqlite";
 
-/** =======================
- *  SUPER-LIGHT MOCK “DB”
- *  Replace these reads/writes with your API/Redux later.
- *  ======================= */
-const MOCK = {
-  doorTags: {
-    "DOOR-1001": {
-      RoomTag: "DOOR-1001",
-      RoomLocation: "101A",
-      BuildingName: "HQ East",
-      assets: [],
-    },
-    "DOOR-2005": {
-      RoomTag: "DOOR-2005",
-      RoomLocation: "2F West",
-      BuildingName: "HQ West",
-      assets: [],
-    },
-  },
-  assetsByCode: {
-    "AST-0001": { AssetTag: "AST-0001", Description: "Office Chair", Serial: "CH-9931" },
-    "AST-0002": { AssetTag: "AST-0002", Description: "Standing Desk", Serial: "SD-5542" },
-    "AST-0003": { AssetTag: "AST-0003", Description: "Monitor 27in", Serial: "MN-2719" },
-    "AST-QR-9": { AssetTag: "AST-QR-9", Description: "Label Printer", Serial: "LP-9009" },
-  },
+const COLORS = {
+  primary: "#003594",
+  gold: "#FFC72C",
+  cream: "#F5E6BD",
+  gray: "#707372",
+  red: "#E74C3C",
+  white: "#FFFFFF",
+  border: "#DDDDDD",
 };
 
 export default function AuditScreen() {
   const dispatch = useDispatch();
-  const { fileInfo, rows, columns, hiddenCols } = useSelector((s) => s.audit);
+  const { fileInfo } = useSelector((s) => s.audit);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const [hasPermission, setHasPermission] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const scanLockRef = useRef(false);
 
-  // contains: { type, data, location, scannedAt }
   const [scannedData, setScannedData] = useState(null);
-
   const { getCurrentLocation } = useLocation();
 
-  // audit working state
-  const [currentDoor, setCurrentDoor] = useState(null); // { RoomTag, RoomLocation, BuildingName, assets[] }
-  const [pickedAssets, setPickedAssets] = useState([]); // array of asset objects
+  const [currentDoor, setCurrentDoor] = useState(null);
+  const [pickedAssets, setPickedAssets] = useState([]);
 
-  const COL_WIDTH = 140;
-  const ROW_HEIGHT = 40;
-  const HEADER_H = 46;
-  const MAX_VISIBLE_ROWS = 40;
+  const insets = useSafeAreaInsets();
+  const { height: screenH } = useWindowDimensions();
 
-  const visibleColumns = useMemo(
-    () => columns.filter((c) => !hiddenCols[c]),
-    [columns, hiddenCols]
-  );
-  const hiddenList = useMemo(
-    () => columns.filter((c) => !!hiddenCols[c]),
-    [columns, hiddenCols]
-  );
-  const tableWidth = useMemo(
-    () => Math.max(visibleColumns.length * COL_WIDTH, 1),
-    [visibleColumns.length]
-  );
-  const listHeight = useMemo(
-    () => Math.min(rows.length, MAX_VISIBLE_ROWS) * ROW_HEIGHT,
-    [rows.length]
-  );
+  // estimate tab bar height, then size our list shorter so footer is never hidden
+  const TABBAR = Platform.select({ ios: 64, android: 88, default: 72 });
+  const ASSETS_LIST_HEIGHT = Math.max(240, Math.floor(screenH * 0.42));
 
-  // ====== CAMERA & SCAN ======
+  useEffect(() => {
+    initDb().catch((e) => console.warn("DB init error:", e));
+  }, []);
+
+  /* ===== Camera & Scan ===== */
   const requestPermissionAndScan = async () => {
     if (Platform.OS === "web") {
       alert("Scanning isn’t available on web.");
@@ -93,12 +68,16 @@ export default function AuditScreen() {
     }
     try {
       const { status } = await Camera.requestCameraPermissionsAsync();
-      const granted = status === "granted";
-      setHasPermission(granted);
-      if (granted) setScanning(true);
+      setHasPermission(status === "granted");
+      if (status === "granted") {
+        scanLockRef.current = false;
+        setScanning(true);
+      } else {
+        alert("Camera permission is required to scan.");
+      }
     } catch (e) {
       console.warn("Camera permission error:", e);
-      alert("Could not access the camera. Check app permissions.");
+      alert("Could not access the camera.");
     }
   };
 
@@ -112,10 +91,13 @@ export default function AuditScreen() {
   };
 
   const handleBarcodeScanned = async ({ type, data }) => {
+    if (scanLockRef.current) return;
+    scanLockRef.current = true;
     setScanning(false);
 
-    const loc = await getCurrentLocation(); // { coords, timestamp } | null
+    await initDb();
 
+    const loc = await getCurrentLocation();
     const payload = {
       type,
       data: String(data),
@@ -124,165 +106,86 @@ export default function AuditScreen() {
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
             altitude: loc.coords.altitude ?? null,
-            accuracy: loc.coords.accuracy ?? null,
           }
         : null,
-      scannedAt: new Date().toISOString(),
     };
     setScannedData(payload);
 
-    // If no door is selected, treat as DOOR scan; otherwise treat as ASSET scan
     if (!currentDoor) {
       const tag = payload.data;
-
-      // find or create the door
-      const door =
-        MOCK.doorTags[tag] ||
-        (MOCK.doorTags[tag] = {
-          RoomTag: tag,
-          RoomLocation: "Unknown",
-          BuildingName: "Unknown",
-          assets: [],
-        });
-
-      // write geolocation into RoomLocation
       const newRoomLocation = formatGeoToRoomLocation(payload.location);
-      MOCK.doorTags[tag].RoomLocation = newRoomLocation;
+      setCurrentDoor({
+        RoomTag: tag,
+        RoomLocation: newRoomLocation,
+        BuildingName: "Unknown",
+      });
+      setPickedAssets([]);
+      alert(`Door selected: ${tag}`);
+      setTimeout(() => (scanLockRef.current = false), 400);
+      return;
+    }
 
-      // set as current door
-      const current = { ...MOCK.doorTags[tag] };
-      setCurrentDoor(current);
+    try {
+      const code = payload.data;
+      let existing = null;
+      try {
+        existing = await getItem(code);
+      } catch {
+        existing = null;
+      }
+      const asset = existing
+        ? {
+            AssetTag: existing.tag,
+            Description: existing.name,
+            Serial: existing.serial,
+          }
+        : {
+            AssetTag: code,
+            Description: "Unknown Asset",
+            Serial: `SN-${String(code).slice(-4)}`,
+          };
+      setPickedAssets((prev) =>
+        prev.some((a) => a.AssetTag === asset.AssetTag) ? prev : [...prev, asset]
+      );
+    } finally {
+      setTimeout(() => (scanLockRef.current = false), 400);
+    }
+  };
 
-      // load its assets into the working list
-      const loadedAssets = (current.assets || []).map((assetTag) => {
-        return (
-          MOCK.assetsByCode[assetTag] ||
-          (MOCK.assetsByCode[assetTag] = {
-            AssetTag: assetTag,
-            Description: "Mock Asset",
-            Serial: `SN-${String(assetTag).slice(-4)}`,
-          })
+  const removeAsset = (tag) =>
+    setPickedAssets((prev) => prev.filter((a) => a.AssetTag !== tag));
+
+  const saveWork = async () => {
+    if (!currentDoor || pickedAssets.length === 0) {
+      alert("Scan a door and at least one asset first.");
+      return;
+    }
+    try {
+      await initDb();
+      const db = await SQLite.openDatabaseAsync("app.db");
+      for (const a of pickedAssets) {
+        await db.runAsync(
+          `INSERT INTO auditing (tag, name, serial, dept_id)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(tag) DO UPDATE SET name=excluded.name`,
+          [a.AssetTag, a.Description, a.Serial, currentDoor.RoomTag]
         );
-      });
-      setPickedAssets(loadedAssets);
-
-      const where = payload.location
-        ? ` @ (${payload.location.latitude.toFixed(6)}, ${payload.location.longitude.toFixed(6)})`
-        : "";
-      alert(
-        `Door selected: ${tag}${where}\nRoomLocation updated to: ${newRoomLocation}`
-      );
-      return;
+      }
+      alert("Work saved!");
+      setPickedAssets([]);
+      setCurrentDoor(null);
+    } catch (e) {
+      console.warn(e);
+      alert("Failed to save audit.");
     }
-
-    // asset scan (door already selected)
-    const code = payload.data;
-    const asset =
-      MOCK.assetsByCode[code] ||
-      (MOCK.assetsByCode[code] = {
-        AssetTag: code,
-        Description: "Mock Asset",
-        Serial: `SN-${String(code).slice(-4)}`,
-      });
-
-    setPickedAssets((prev) =>
-      prev.some((a) => a.AssetTag === asset.AssetTag) ? prev : [...prev, asset]
-    );
-
-    const where = payload.location
-      ? ` @ (${payload.location.latitude.toFixed(6)}, ${payload.location.longitude.toFixed(6)})`
-      : "";
-    alert(`Asset added: ${asset.AssetTag}${where}`);
   };
 
-  // remove asset from the working list
-  const removeAsset = (assetTag) =>
-    setPickedAssets((prev) => prev.filter((a) => a.AssetTag !== assetTag));
-
-  // persist working list into the door tag
-  const saveWork = () => {
-    if (!currentDoor) {
-      alert("Scan a door tag first.");
-      return;
-    }
-    const ids = pickedAssets.map((a) => a.AssetTag);
-    MOCK.doorTags[currentDoor.RoomTag].assets = ids;
-    alert(
-      `Saved ${ids.length} asset${ids.length === 1 ? "" : "s"} to ${currentDoor.RoomTag}.`
-    );
-    // RESET so the next scan is a DOOR tag
-    setPickedAssets([]);
-    setCurrentDoor(null);
-  };
-
-  // Render full-screen camera when scanning
-  if (scanning) {
-    if (hasPermission === null) {
-      return (
-        <View style={styles.center}>
-          <Text>Requesting camera permission…</Text>
-        </View>
-      );
-    }
-    if (hasPermission === false) {
-      return (
-        <View style={styles.center}>
-          <Text>No camera permission. Enable it in system settings.</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={{ flex: 1, backgroundColor: "#000" }}>
-        <CameraView
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: [
-              "qr",
-              "pdf417",
-              "ean13",
-              "ean8",
-              "upc_a",
-              "upc_e",
-              "code128",
-              "code39",
-              "code93",
-              "itf14",
-              "codabar",
-              "datamatrix",
-              "aztec",
-              "interleaved2of5",
-            ],
-          }}
-          style={StyleSheet.absoluteFillObject}
-        />
-
-        {/* Cancel button overlay */}
-        <View style={styles.cancelContainer}>
-          <Pressable
-            style={styles.cancelButton}
-            onPress={() => setScanning(false)}
-            android_ripple={{ color: "#e5e7eb" }}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  // ====== PICK EXCEL ======
+  /* ===== Upload ===== */
   const pickExcel = async () => {
     setError("");
     setLoading(true);
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: [
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "application/vnd.ms-excel",
-          "text/csv",
-          "*/*",
-        ],
         multiple: false,
         copyToCacheDirectory: true,
       });
@@ -290,353 +193,226 @@ export default function AuditScreen() {
         setLoading(false);
         return;
       }
-
-      const file = res.assets?.[0];
-      const nextFileInfo = {
-        name: file.name,
-        size: file.size,
-        uri: file.uri,
-        mimeType: file.mimeType,
-      };
-
+      const file = res.assets[0];
       const base64 = await FileSystem.readAsStringAsync(file.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
       const wb = XLSX.read(base64, { type: "base64" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-
-      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-      const maxCols = aoa.reduce((m, r) => Math.max(m, r.length), 0);
-      const headerIndex = aoa.findIndex(
-        (r) =>
-          r.length === maxCols &&
-          r.slice(0, maxCols).every((c) => String(c).trim() !== ""
-        )
-      );
-      const headerRow = headerIndex >= 0 ? aoa[headerIndex] : aoa[0] || [];
-
-      let cols = headerRow.map((c, i) =>
-        String(c).trim() ? String(c).trim() : `Column_${i + 1}`
-      );
-      const seen = new Map();
-      cols = cols.map((name) => {
-        const n = seen.get(name) || 0;
-        seen.set(name, n + 1);
-        return n === 0 ? name : `${name}_${n + 1}`;
-      });
-
-      const dataRows = (headerIndex >= 0 ? aoa.slice(headerIndex + 1) : aoa.slice(1)).map(
-        (r) => {
-          const o = {};
-          cols.forEach((col, i) => {
-            o[col] = r[i] ?? "";
-          });
-          return o;
-        }
-      );
-
-      dispatch(setData({ fileInfo: nextFileInfo, columns: cols, rows: dataRows }));
+      const data = XLSX.utils.sheet_to_json(ws);
+      dispatch(setData({ fileInfo: file, rows: data }));
     } catch (e) {
-      console.log(e);
-      setError("Could not read that file. Try a .xlsx, .xls, or .csv.");
+      console.error(e);
+      setError("Import failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  const Header = () => (
-    <View style={[styles.headerRow, { height: HEADER_H, width: tableWidth }]}>
-      {visibleColumns.map((c, i) => (
-        <Pressable
-          key={`hdr-${i}-${c}`}
-          onPress={() => dispatch(toggleColumn(c))}
-          style={[styles.headerCell, { width: COL_WIDTH, height: HEADER_H }]}
-          android_ripple={{ color: "#e5e7eb" }}
-        >
-          <Text style={styles.headerText} numberOfLines={1}>
-            {c}
-          </Text>
-          <Text style={styles.headerHint}>tap to hide</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-
-  const Row = ({ item, index }) => (
-    <View
-      style={[
-        styles.row,
-        index % 2 ? styles.altRow : null,
-        { width: tableWidth, height: ROW_HEIGHT },
-      ]}
-    >
-      {visibleColumns.map((c, i) => (
-        <View
-          key={`cell-${index}-${i}-${c}`}
-          style={[styles.cell, { width: COL_WIDTH, height: ROW_HEIGHT }]}
-        >
-          <Text numberOfLines={1}>{String(item[c] ?? "")}</Text>
-        </View>
-      ))}
-    </View>
-  );
-
-  // helper to show last scan info
-  const renderLastScanned = () => {
-    if (!scannedData) return null;
-    const locText = scannedData.location
-      ? `${scannedData.location.latitude.toFixed(6)}, ${scannedData.location.longitude.toFixed(6)}, ${
-          typeof scannedData.location.altitude === "number"
-            ? scannedData.location.altitude.toFixed(1)
-            : "n/a"
-        }`
-      : "(no location)";
-    return (
-      <Text style={{ marginTop: 10, color: "#2563eb", textAlign: "center" }}>
-        Last scanned: Type: {scannedData.type}, Data: {scannedData.data}, Location: {locText}
-      </Text>
-    );
-  };
-
-  const renderAuditTray = () => (
-    <View style={styles.auditTray}>
-      <Text style={styles.trayTitle}>Current Door</Text>
-      {currentDoor ? (
-        <View style={styles.doorCard}>
-          <Text style={styles.doorLine}>
-            <Text style={styles.bold}>RoomTag:</Text> {currentDoor.RoomTag}
-          </Text>
-          <Text style={styles.doorLine}>
-            <Text style={styles.bold}>RoomLocation:</Text> {currentDoor.RoomLocation}
-          </Text>
-          <Text style={styles.doorLine}>
-            <Text style={styles.bold}>BuildingName:</Text> {currentDoor.BuildingName}
-          </Text>
-        </View>
-      ) : (
-        <Text style={styles.trayHint}>Scan a door tag to start. While a door is selected, scans are treated as assets.</Text>
-      )}
-
-      <Text style={[styles.trayTitle, { marginTop: 12 }]}>Scanned Assets</Text>
-      {pickedAssets.length === 0 ? (
-        <Text style={styles.trayHint}>Scan assets — they’ll appear here.</Text>
-      ) : (
-        <View style={{ gap: 8 }}>
-          {pickedAssets.map((a) => (
-            <View key={a.AssetTag} style={styles.assetRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.assetMain} numberOfLines={1}>
-                  {a.AssetTag} — {a.Description}
-                </Text>
-                <Text style={styles.assetSub}>Serial: {a.Serial}</Text>
-              </View>
-              <Pressable
-                onPress={() => removeAsset(a.AssetTag)}
-                style={styles.removeBtn}
-                android_ripple={{ color: "#fecaca" }}
-              >
-                <Text style={styles.removeText}>×</Text>
-              </Pressable>
-            </View>
-          ))}
-        </View>
-      )}
-
-      <Pressable
-        disabled={!currentDoor || pickedAssets.length === 0}
-        onPress={saveWork}
-        style={[
-          styles.saveBtn,
-          (!currentDoor || pickedAssets.length === 0) && { opacity: 0.5 },
-        ]}
-      >
-        <Text style={styles.saveText}>Save Work</Text>
+  const renderAsset = ({ item }) => (
+    <View style={styles.assetRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.assetMain} numberOfLines={1}>
+          {item.AssetTag} — {item.Description}
+        </Text>
+        <Text style={styles.assetSub}>Serial: {item.Serial}</Text>
+      </View>
+      <Pressable style={styles.removeBtn} onPress={() => removeAsset(item.AssetTag)}>
+        <Text style={styles.removeText}>×</Text>
       </Pressable>
     </View>
   );
+
+  /* ===== Scanning full-screen ===== */
+  if (scanning) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <CameraView
+          facing="back"
+          onBarcodeScanned={handleBarcodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ["qr", "code128", "ean13", "ean8", "upc_a", "upc_e", "code39"],
+          }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.cancelContainer}>
+          <Pressable style={styles.cancelButton} onPress={() => setScanning(false)}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Audit</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Dataworks</Text>
+        <Text style={styles.headerSubtitle}>Audit</Text>
+      </View>
 
-      {/* Single SCAN button */}
-      <Pressable
-        style={[styles.button, { marginBottom: 10 }]}
-        onPress={requestPermissionAndScan}
-      >
-        <Text style={styles.buttonText}>Scan QR / Barcode</Text>
-      </Pressable>
+      {/* Top actions */}
+      <View style={[styles.card, styles.shadow]}>
+        <Pressable style={[styles.btn, styles.btnPrimary]} onPress={requestPermissionAndScan}>
+          <Text style={styles.btnText}>Scan QR / Barcode</Text>
+        </Pressable>
+        <Pressable style={[styles.btn, styles.btnOutline, { marginTop: 10 }]} onPress={pickExcel}>
+          <Text style={styles.btnOutlineText}>Upload Excel / CSV</Text>
+        </Pressable>
+        {scannedData && (
+          <Text style={styles.lastScanText}>Last scanned: {scannedData.data}</Text>
+        )}
+      </View>
 
-      {/* Upload */}
-      <Pressable style={styles.button} onPress={pickExcel}>
-        <Text style={styles.buttonText}>Upload Excel / CSV</Text>
-      </Pressable>
-
-      {renderLastScanned()}
-
-      {/* Working tray */}
-      {renderAuditTray()}
-
-      {loading && <ActivityIndicator size="large" />}
-
-      {fileInfo && !loading && (
-        <View style={{ marginTop: 12 }}>
-          <Text style={styles.meta}>File: {fileInfo.name}</Text>
-          {!!fileInfo.size && <Text style={styles.meta}>Size: {fileInfo.size} bytes</Text>}
-        </View>
-      )}
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {hiddenList.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-          {hiddenList.map((c, i) => (
-            <Pressable
-              key={`hidden-${i}-${c}`}
-              onPress={() => dispatch(showColumn(c))}
-              style={styles.restoreChip}
-              android_ripple={{ color: "#e5e7eb" }}
-            >
-              <Text style={styles.restoreText}>Show: {c}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-
-      {rows.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          contentContainerStyle={{ paddingTop: 8 }}
-        >
-          <View
-            style={[styles.tableBox, { width: tableWidth, maxHeight: HEADER_H + listHeight }]}
-          >
-            <Header />
-            <FlatList
-              data={rows}
-              keyExtractor={(_, idx) => String(idx)}
-              renderItem={Row}
-              showsVerticalScrollIndicator
-              style={{ width: tableWidth, height: listHeight }}
-              initialNumToRender={40}
-              maxToRenderPerBatch={50}
-              windowSize={10}
-              removeClippedSubviews
-              getItemLayout={(_, index) => ({
-                length: ROW_HEIGHT,
-                offset: ROW_HEIGHT * index,
-                index,
-              })}
-            />
+      {/* Current Door */}
+      <View style={[styles.card, styles.shadow]}>
+        <Text style={styles.sectionTitle}>Current Door</Text>
+        {currentDoor ? (
+          <View style={styles.doorBox}>
+            <Text style={styles.doorLine}>
+              <Text style={styles.bold}>RoomTag: </Text>
+              {currentDoor.RoomTag}
+            </Text>
+            <Text style={styles.doorLine}>
+              <Text style={styles.bold}>RoomLocation: </Text>
+              {currentDoor.RoomLocation}
+            </Text>
+            <Text style={styles.doorLine}>
+              <Text style={styles.bold}>BuildingName: </Text>
+              {currentDoor.BuildingName}
+            </Text>
           </View>
-        </ScrollView>
-      )}
+        ) : (
+          <Text style={styles.hint}>
+            Scan a door tag to start. While a door is selected, scans are treated as assets.
+          </Text>
+        )}
+      </View>
+
+      {/* Scanned Assets */}
+      <View style={[styles.card, styles.shadow]}>
+        <Text style={styles.sectionTitle}>Scanned Assets</Text>
+
+        {pickedAssets.length === 0 ? (
+          <Text style={styles.hint}>Scan assets — they’ll appear here.</Text>
+        ) : (
+          <FlatList
+            data={pickedAssets}
+            renderItem={renderAsset}
+            keyExtractor={(a) => a.AssetTag}
+            style={{ height: ASSETS_LIST_HEIGHT }}
+            showsVerticalScrollIndicator
+            contentContainerStyle={{
+              gap: 8,
+              // generous bottom space so footer button can scroll above the tab bar
+              paddingBottom: 16 + TABBAR + insets.bottom + 16,
+            }}
+            ListFooterComponent={() => (
+              <View
+                style={{
+                  paddingTop: 8,
+                  // push the button up from the bottom so it never sits under tabs
+                  marginBottom: TABBAR + insets.bottom + 24,
+                }}
+              >
+                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={saveWork}>
+                  <Text style={styles.btnText}>Save Work</Text>
+                </Pressable>
+              </View>
+            )}
+            ListFooterComponentStyle={{}}
+          />
+        )}
+      </View>
+
+      {loading && <ActivityIndicator size="large" color={COLORS.primary} />}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
 
+/* ----------------- STYLES ----------------- */
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, paddingTop: 60, backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 12, textAlign: "center" },
-  button: {
-    alignSelf: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  buttonText: { fontSize: 16, fontWeight: "600" },
-  meta: { marginTop: 4, fontSize: 14 },
-  error: { color: "red", marginTop: 10 },
-  restoreChip: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#f9fafb",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    marginRight: 8,
-  },
-  restoreText: { fontSize: 12, color: "#111827", fontWeight: "500" },
-  tableBox: {
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: "hidden",
-    backgroundColor: "#fff",
-    borderColor: "#d1d5db",
-  },
-  headerRow: {
-    flexDirection: "row",
-    backgroundColor: "#f2f6ff",
-    borderBottomWidth: 1,
-    borderColor: "#cfe0ff",
-  },
-  headerCell: { paddingHorizontal: 10, justifyContent: "center" },
-  headerText: { fontWeight: "700" },
-  headerHint: { fontSize: 10, color: "#6b7280" },
-  row: {
-    flexDirection: "row",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e5e7eb",
-  },
-  altRow: { backgroundColor: "#fafafa" },
-  cell: { paddingHorizontal: 10, justifyContent: "center" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  container: { flex: 1, backgroundColor: COLORS.cream },
 
-  // Cancel button styling (overlay)
-  cancelContainer: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingTop: Platform.OS === "ios" ? 0 : 40,
+    paddingBottom: 18,
     alignItems: "center",
   },
-  cancelButton: {
-    backgroundColor: "rgba(255,255,255,0.85)",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: COLORS.white,
   },
-  cancelText: {
-    color: "#000",
-    fontWeight: "700",
+  headerSubtitle: {
     fontSize: 16,
+    color: COLORS.gold,
+    fontWeight: "600",
   },
 
-  // audit tray + red X list
-  auditTray: {
-    marginTop: 16,
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+
+  btn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnPrimary: { backgroundColor: COLORS.primary },
+  btnOutline: {
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: COLORS.primary,
+  },
+  btnText: { color: COLORS.white, fontWeight: "700", fontSize: 14 },
+  btnOutlineText: { color: COLORS.primary, fontWeight: "700", fontSize: 14 },
+
+  sectionTitle: {
+    color: COLORS.primary,
+    fontWeight: "800",
+    fontSize: 18,
+    marginBottom: 10,
+  },
+
+  doorBox: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderRadius: 10,
     padding: 12,
-    backgroundColor: "#fafafa",
   },
-  trayTitle: { fontSize: 16, fontWeight: "700" },
-  trayHint: { marginTop: 6, color: "#6b7280" },
-  doorCard: {
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 8,
-    padding: 10,
-    backgroundColor: "#fff",
-  },
-  doorLine: { fontSize: 14, marginBottom: 2 },
+  doorLine: { fontSize: 14, marginBottom: 4, color: COLORS.primary },
   bold: { fontWeight: "700" },
+  hint: { color: COLORS.gray },
+
+  lastScanText: {
+    marginTop: 10,
+    color: COLORS.primary,
+    textAlign: "center",
+    fontSize: 13,
+  },
+
   assetRow: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#fff",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 10,
   },
-  assetMain: { fontSize: 14, fontWeight: "600" },
-  assetSub: { fontSize: 12, color: "#6b7280" },
+  assetMain: { fontSize: 14, fontWeight: "600", color: COLORS.primary },
+  assetSub: { fontSize: 12, color: COLORS.gray, marginTop: 2 },
   removeBtn: {
     marginLeft: 10,
     width: 28,
@@ -646,17 +422,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fee2e2",
     borderWidth: 1,
-    borderColor: "#ef4444",
+    borderColor: COLORS.red,
   },
-  removeText: { fontSize: 18, fontWeight: "800", color: "#b91c1c", lineHeight: 18 },
-  saveBtn: {
-    marginTop: 12,
-    alignSelf: "flex-start",
+  removeText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.red,
+    lineHeight: 18,
+  },
+
+  // Camera cancel overlay
+  cancelContainer: {
+    position: "absolute",
+    top: 50,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  cancelButton: {
+    backgroundColor: "rgba(255,255,255,0.92)",
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
     borderRadius: 10,
-    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  saveText: { color: "#fff", fontWeight: "700" },
+  cancelText: {
+    color: COLORS.primary,
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  error: { color: COLORS.red, textAlign: "center", marginTop: 8 },
 });
 
