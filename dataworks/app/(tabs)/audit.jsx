@@ -19,7 +19,6 @@ import { Camera, CameraView } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useLocation from "../../hooks/useLocation";
 import * as SQLite from "expo-sqlite";
-// ✅ keep sqlite import name/path exactly:
 import { initDb, getItem } from "../../src/sqlite";
 
 const COLORS = {
@@ -305,14 +304,12 @@ export default function AuditScreen() {
             showsVerticalScrollIndicator
             contentContainerStyle={{
               gap: 8,
-              // generous bottom space so footer button can scroll above the tab bar
               paddingBottom: 16 + TABBAR + insets.bottom + 16,
             }}
             ListFooterComponent={() => (
               <View
                 style={{
                   paddingTop: 8,
-                  // push the button up from the bottom so it never sits under tabs
                   marginBottom: TABBAR + insets.bottom + 24,
                 }}
               >
