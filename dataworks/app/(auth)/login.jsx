@@ -1,17 +1,17 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import {
-  View,
-  TextInput,
-  StyleSheet,
   Alert,
-  Text,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { router } from "expo-router";
+import { checkUser, initDb, logUserInfo } from "../../src/sqlite";
 import { storeLogin } from "../lib/store-login";
-import { initDb, logUserInfo, checkUser } from "../../src/sqlite";
 
 const LOGIN_PATH = "/phone-api/check-login.php";
 
@@ -37,6 +37,8 @@ export default function LoginScreen() {
       Alert.alert("Missing fields", "Please enter email and password.");
       return;
     }
+    await initDb();
+
 
     setLoading(true);
     //try {
@@ -78,7 +80,7 @@ export default function LoginScreen() {
       user = await checkUser(email);
       // console.log("Final email/username:", email, username);
       if (user === undefined || user.length === 0) {
-        initDb();
+        await initDb();
         const res = await logUserInfo(email, username);
         // console.log("New user logged:", res);
         // console.log("User created:", email, username);
