@@ -19,7 +19,8 @@ import {
   initDb,
   getItem,
   updateAuditingFoundStatus,
-  selectAllAuditing,
+  selectAllAuditing,     // ← used after inserts to verify
+  selectSingleAsset,     // ← used to display found_status
 } from "../../src/sqlite";
 
 const COLORS = {
@@ -30,6 +31,8 @@ const COLORS = {
   red: "#E74C3C",
   white: "#FFFFFF",
   border: "#DDDDDD",
+  green: "#16a34a",
+  orange: "#d97706",
 };
 
 const COMPLETE_AUDIT_URL =
@@ -48,6 +51,9 @@ export default function AuditScreen() {
   const [pickedAssets, setPickedAssets] = useState([]);
   const [busy, setBusy] = useState(false);
 
+  // tag -> found_status
+  const [statusMap, setStatusMap] = useState({});
+
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
 
@@ -57,6 +63,26 @@ export default function AuditScreen() {
   useEffect(() => {
     initDb().catch((e) => console.warn("DB init error:", e));
   }, []);
+
+  // Refresh status map whenever scanned assets change
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await initDb();
+        const next = {};
+        for (const a of pickedAssets) {
+          const tag = String(a?.AssetTag ?? "");
+          if (!tag) continue;
+          try {
+            const row = await selectSingleAsset(tag);
+            if (row && row.found_status) next[tag] = row.found_status;
+          } catch {}
+        }
+        if (!cancelled) setStatusMap(next);
+      } catch {}
+    })();
+  }, [pickedAssets]);
 
   /* ===== Camera & Scan ===== */
   const requestPermissionAndScan = async () => {
@@ -156,8 +182,8 @@ export default function AuditScreen() {
     setPickedAssets((prev) => prev.filter((a) => a.AssetTag !== tag));
 
   /** SAVE WORK
-   * Confirm Yes/No, then call only updateAuditingFoundStatus per asset.
-   * After success, reset the door + scanned assets.
+   * Confirm Yes/No, await updateAuditingFoundStatus per asset,
+   * then call selectAllAuditing() and log/alert the total rows.
    */
   const saveWork = async () => {
     if (!currentDoor || pickedAssets.length === 0) {
@@ -188,20 +214,31 @@ export default function AuditScreen() {
 
             const failed = [];
             for (const a of pickedAssets) {
+              const tagStr = String(a.AssetTag ?? "");
+              // Skip obvious non-tag scans (e.g., URLs)
+              if (!/^\d+$/.test(tagStr)) {
+                failed.push(tagStr);
+                continue;
+              }
               try {
                 await updateAuditingFoundStatus(
-                  a.AssetTag,
+                  tagStr,
                   geoX,
                   geoY,
                   elevation,
                   currentDoor.RoomTag, // found_room_tag
-                  deptId                // dept_id for server lookup (kept as-is)
+                  deptId                // dept_id for server lookup
                 );
               } catch (err) {
-                console.warn("updateAuditingFoundStatus failed:", a.AssetTag, err);
-                failed.push(a.AssetTag);
+                console.warn("updateAuditingFoundStatus failed:", tagStr, err);
+                failed.push(tagStr);
               }
             }
+
+            // After inserting/updating, read the current auditing table
+            const allAuditing = await selectAllAuditing();
+            console.log("Auditing table after inserts:", allAuditing);
+            alert(`Auditing table now contains ${allAuditing.length} rows.`);
 
             if (failed.length) {
               Alert.alert(
@@ -210,9 +247,12 @@ export default function AuditScreen() {
               );
             } else {
               alert("Work saved!");
-              setPickedAssets([]);
-              setCurrentDoor(null);
             }
+
+            // Reset for next door
+            setPickedAssets([]);
+            setCurrentDoor(null);
+            setStatusMap({});
           } catch (e) {
             console.warn("Save Work error:", e);
             alert("Failed to save audit.");
@@ -224,10 +264,7 @@ export default function AuditScreen() {
     ]);
   };
 
-  /** FINISH AUDIT
-   * Confirm text: “Do you want to finish and save this audit?”
-   * Sends entire local auditing table to server.
-   */
+  /** FINISH AUDIT */
   const finishAudit = async () => {
     Alert.alert(
       "Finish Audit?",
@@ -264,19 +301,29 @@ export default function AuditScreen() {
     );
   };
 
-  const renderAsset = ({ item }) => (
-    <View style={styles.assetRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.assetMain} numberOfLines={1}>
-          {item.AssetTag} — {item.Description}
-        </Text>
-        <Text style={styles.assetSub}>Serial: {item.Serial}</Text>
+  const renderAsset = ({ item }) => {
+    const tag = String(item.AssetTag);
+    const status = statusMap[tag] ?? "Pending";
+    const statusColor =
+      status === "Found" ? COLORS.green : status === "Extra" ? COLORS.orange : COLORS.gray;
+
+    return (
+      <View style={styles.assetRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.assetMain} numberOfLines={1}>
+            {item.AssetTag} — {item.Description}
+          </Text>
+          <Text style={styles.assetSub}>Serial: {item.Serial}</Text>
+          <Text style={[styles.assetStatus, { color: statusColor }]}>
+            Status: {status}
+          </Text>
+        </View>
+        <Pressable style={styles.removeBtn} onPress={() => removeAsset(item.AssetTag)}>
+          <Text style={styles.removeText}>×</Text>
+        </Pressable>
       </View>
-      <Pressable style={styles.removeBtn} onPress={() => removeAsset(item.AssetTag)}>
-        <Text style={styles.removeText}>×</Text>
-      </Pressable>
-    </View>
-  );
+    );
+  };
 
   /* ===== Scanning full-screen ===== */
   if (scanning) {
@@ -487,6 +534,7 @@ const styles = StyleSheet.create({
   },
   assetMain: { fontSize: 14, fontWeight: "600", color: COLORS.primary },
   assetSub: { fontSize: 12, color: COLORS.gray, marginTop: 2 },
+  assetStatus: { marginTop: 2, fontSize: 12, fontWeight: "700" },
   removeBtn: {
     marginLeft: 10,
     width: 28,

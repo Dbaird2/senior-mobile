@@ -604,7 +604,7 @@ export async function updateAuditingFoundStatus(tag, geo_x, geo_y, elevation, fo
     db.runAsync('UPDATE auditing SET found_status = ?, geo_x = ?, geo_y = ?, elevation = ?, found_room_tag = ?, found_timestamp = ? WHERE tag = ?',
       ['Found', geo_x, geo_y, elevation, found_room_tag, current_time, tag]);
   } else {
-    const asset_res = await fetch('https://dataworks-7b7x.onrender.com/phone-api/get-asset-info.php',
+    const asset_res = await fetch('https://dataworks-7b7x.onrender.com/phone-api/audit/get-asset-info.php',
       {
         method: 'POST',
         headers: {"Content-Type": "application/json"},
