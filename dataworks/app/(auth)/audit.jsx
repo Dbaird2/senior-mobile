@@ -4,18 +4,23 @@ import {
   View,
   Text,
   Pressable,
-  ActivityIndicator,
   FlatList,
   StyleSheet,
   Platform,
   useWindowDimensions,
+  Alert,
 } from "react-native";
 import { useDispatch } from "react-redux";
 import { Camera, CameraView } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useLocation from "../../hooks/useLocation";
-import * as SQLite from "expo-sqlite";
-import { initDb, getItem } from "../../src/sqlite";
+
+import {
+  initDb,
+  getItem,
+  updateAuditingFoundStatus,
+  selectAllAuditing,
+} from "../../src/sqlite";
 
 const COLORS = {
   primary: "#003594",
@@ -26,6 +31,9 @@ const COLORS = {
   white: "#FFFFFF",
   border: "#DDDDDD",
 };
+
+const COMPLETE_AUDIT_URL =
+  "https://dataworks-7b7x.onrender.com/phone-api/audit/complete-audit.php";
 
 export default function AuditScreen() {
   const dispatch = useDispatch();
@@ -38,6 +46,7 @@ export default function AuditScreen() {
 
   const [currentDoor, setCurrentDoor] = useState(null);
   const [pickedAssets, setPickedAssets] = useState([]);
+  const [busy, setBusy] = useState(false);
 
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
@@ -100,6 +109,7 @@ export default function AuditScreen() {
     };
     setScannedData(payload);
 
+    // First scan = door selection
     if (!currentDoor) {
       const tag = payload.data;
       const newRoomLocation = formatGeoToRoomLocation(payload.location);
@@ -114,6 +124,7 @@ export default function AuditScreen() {
       return;
     }
 
+    // Subsequent scans = assets for the selected door
     try {
       const code = payload.data;
       let existing = null;
@@ -144,29 +155,113 @@ export default function AuditScreen() {
   const removeAsset = (tag) =>
     setPickedAssets((prev) => prev.filter((a) => a.AssetTag !== tag));
 
+  /** SAVE WORK
+   * Confirm Yes/No, then call only updateAuditingFoundStatus per asset.
+   * After success, reset the door + scanned assets.
+   */
   const saveWork = async () => {
     if (!currentDoor || pickedAssets.length === 0) {
       alert("Scan a door and at least one asset first.");
       return;
     }
-    try {
-      await initDb();
-      const db = await SQLite.openDatabaseAsync("app.db");
-      for (const a of pickedAssets) {
-        await db.runAsync(
-          `INSERT INTO auditing (tag, name, serial, dept_id)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(tag) DO UPDATE SET name=excluded.name`,
-          [a.AssetTag, a.Description, a.Serial, currentDoor.RoomTag]
-        );
-      }
-      alert("Work saved!");
-      setPickedAssets([]);
-      setCurrentDoor(null);
-    } catch (e) {
-      console.warn(e);
-      alert("Failed to save audit.");
-    }
+
+    Alert.alert("Save Work?", "Record the scanned assets for this door?", [
+      { text: "No", style: "cancel" },
+      {
+        text: "Yes",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await initDb();
+
+            // fresh geo
+            const loc = await getCurrentLocation();
+            const geoX = loc?.coords?.latitude ?? null;
+            const geoY = loc?.coords?.longitude ?? null;
+            const elevation =
+              typeof loc?.coords?.altitude === "number"
+                ? loc.coords.altitude
+                : null;
+
+            // If you have a true dept_id available, pass it instead of RoomTag.
+            const deptId = currentDoor.RoomTag;
+
+            const failed = [];
+            for (const a of pickedAssets) {
+              try {
+                await updateAuditingFoundStatus(
+                  a.AssetTag,
+                  geoX,
+                  geoY,
+                  elevation,
+                  currentDoor.RoomTag, // found_room_tag
+                  deptId                // dept_id for server lookup (kept as-is)
+                );
+              } catch (err) {
+                console.warn("updateAuditingFoundStatus failed:", a.AssetTag, err);
+                failed.push(a.AssetTag);
+              }
+            }
+
+            if (failed.length) {
+              Alert.alert(
+                "Partial save",
+                `Saved most items, but these failed:\n${failed.join(", ")}`
+              );
+            } else {
+              alert("Work saved!");
+              setPickedAssets([]);
+              setCurrentDoor(null);
+            }
+          } catch (e) {
+            console.warn("Save Work error:", e);
+            alert("Failed to save audit.");
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  /** FINISH AUDIT
+   * Confirm text: “Do you want to finish and save this audit?”
+   * Sends entire local auditing table to server.
+   */
+  const finishAudit = async () => {
+    Alert.alert(
+      "Finish Audit?",
+      "Do you want to finish and save this audit?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          onPress: async () => {
+            try {
+              setBusy(true);
+              await initDb();
+
+              const rows = await selectAllAuditing();
+              const res = await fetch(COMPLETE_AUDIT_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ data: rows }),
+              });
+
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const json = await res.json();
+              console.log("Finish Audit response:", json);
+              alert("Audit submitted successfully.");
+            } catch (e) {
+              console.warn("Finish audit failed:", e);
+              alert("Failed to submit audit.");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderAsset = ({ item }) => (
@@ -214,9 +309,27 @@ export default function AuditScreen() {
 
       {/* Top actions */}
       <View style={[styles.card, styles.shadow]}>
-        <Pressable style={[styles.btn, styles.btnPrimary]} onPress={requestPermissionAndScan}>
-          <Text style={styles.btnText}>Scan QR / Barcode</Text>
+        <Pressable
+          style={[styles.btn, styles.btnPrimary]}
+          onPress={requestPermissionAndScan}
+          disabled={busy}
+        >
+          <Text style={styles.btnText}>
+            {busy ? "Working..." : "Scan QR / Barcode"}
+          </Text>
         </Pressable>
+
+        {/* Centered Finish Audit button */}
+        <View style={{ marginTop: 10, alignItems: "center" }}>
+          <Pressable
+            style={[styles.btn, styles.btnOutlineSmall]}
+            onPress={finishAudit}
+            disabled={busy}
+          >
+            <Text style={styles.btnOutlineSmallText}>Finish Audit</Text>
+          </Pressable>
+        </View>
+
         {scannedData && (
           <Text style={styles.lastScanText}>Last scanned: {scannedData.data}</Text>
         )}
@@ -271,7 +384,11 @@ export default function AuditScreen() {
                   marginBottom: TABBAR + insets.bottom + 24,
                 }}
               >
-                <Pressable style={[styles.btn, styles.btnPrimary]} onPress={saveWork}>
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary]}
+                  onPress={saveWork}
+                  disabled={busy}
+                >
                   <Text style={styles.btnText}>Save Work</Text>
                 </Pressable>
               </View>
@@ -321,6 +438,18 @@ const styles = StyleSheet.create({
   },
   btnPrimary: { backgroundColor: COLORS.primary },
   btnText: { color: COLORS.white, fontWeight: "700", fontSize: 14 },
+
+  // Centered outline button for "Finish Audit"
+  btnOutlineSmall: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignSelf: "center",
+  },
+  btnOutlineSmallText: { color: COLORS.primary, fontWeight: "700", fontSize: 14 },
 
   sectionTitle: {
     color: COLORS.primary,
@@ -395,6 +524,14 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "700",
     fontSize: 16,
+  },
+
+  shadow: {
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
 });
 
