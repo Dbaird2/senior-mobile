@@ -597,11 +597,13 @@ export async function selectSingleAsset(tag) {
 }
 
 export async function updateAuditingFoundStatus(tag, geo_x, geo_y, elevation, found_room_tag, dept_id) {
+  console.log("updateAuditingFoundStatus called with:", tag, geo_x, geo_y, elevation, found_room_tag, dept_id);
   const db = await getDb();
-  const in_audit = await db.getFirstAsync(`SELECT * FROM auditing WHERE tag = ?`, [tag]);
+  console.log("updateAuditingFoundStatus called with:", tag, geo_x, geo_y, elevation, found_room_tag, dept_id, in_audit);
   const current_time = new Date().toISOString();
+  const in_audit = await db.getFirstAsync(`SELECT * FROM auditing WHERE tag = ?`, [tag]);
   if (in_audit) {
-    db.runAsync('UPDATE auditing SET found_status = ?, geo_x = ?, geo_y = ?, elevation = ?, found_room_tag = ?, found_timestamp = ? WHERE tag = ?',
+    await db.runAsync('UPDATE auditing SET found_status = ?, geo_x = ?, geo_y = ?, elevation = ?, found_room_tag = ?, found_timestamp = ? WHERE tag = ?',
       ['Found', geo_x, geo_y, elevation, found_room_tag, current_time, tag]);
   } else {
     const asset_res = await fetch('https://dataworks-7b7x.onrender.com/phone-api/audit/get-asset-info.php',
@@ -614,13 +616,22 @@ export async function updateAuditingFoundStatus(tag, geo_x, geo_y, elevation, fo
          })
       });
     const asset_data = await asset_res.json();
+    console.log("Asset data response:", asset_data);
     if (asset_data.status === 'success' && asset_data.data.length > 0) {
       const asset = asset_data.data;
-      db.runAsync('INSERT INTO auditing (tag, name, dept_id, serial, po, model, manufacturer, room_tag, type, bus_unit, status, purchase_date, geo_x, geo_y, elevation, found_status, found_room_tag, found_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [tag, asset.asset_name, asset.dept_id, asset.serial_num, asset.po, asset.asset_model, asset.make, asset.room_tag, asset.type2, asset.bus_unit, asset.asset_status, asset.date_added, geo_x, geo_y, elevation, 'Extra', found_room_tag, current_time]);
+      await db.runAsync('INSERT INTO auditing (tag, name, serial, dept_id, serial, po, model, manufacturer, room_tag, type, bus_unit, status, purchase_date, geo_x, geo_y, elevation, found_status, found_room_tag, found_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [tag, asset.asset_name, asset.serial_num, asset.dept_id, asset.serial_num, asset.po, asset.asset_model, asset.make, asset.room_tag, asset.type2, asset.bus_unit, asset.asset_status, asset.date_added, geo_x, geo_y, elevation, 'Extra', found_room_tag, current_time]);
     } else {
-      db.runAsync('INSERT INTO auditing (tag, found_status, geo_x, geo_y, elevation, found_room_tag, found_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [tag, 'Extra', geo_x, geo_y, elevation, found_room_tag, current_time]);
+      console.log("Asset not found in server, inserting with minimal info");
+      try {
+        await db.runAsync(
+          'INSERT INTO auditing (tag, name, serial, found_status, geo_x, geo_y, elevation, found_room_tag, found_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tag) DO UPDATE SET found_status = excluded.found_status, geo_x = excluded.geo_x, geo_y = excluded.geo_y, elevation = excluded.elevation, found_room_tag = excluded.found_room_tag, found_timestamp = excluded.found_timestamp',
+          [tag, 'Unknown Asset', 'N/A', 'Extra', geo_x, geo_y, elevation, found_room_tag, current_time]
+        );
+        console.log('Insert successful!');
+      } catch (err) {
+        console.error('Error inserting row:', err);
+      }
     }
   }
 }

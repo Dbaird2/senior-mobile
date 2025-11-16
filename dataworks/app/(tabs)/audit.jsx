@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
+  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -13,7 +14,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from "react-native";
 import {
   deleteAuditingTable,
@@ -156,7 +156,7 @@ async function startAuditFetch(dept) {
   const dept_name = dept[0];
   await initDb();
 
-  console.log("Starting audit for dept_name:", dept_name);
+  //console.log("Starting audit for dept_name:", dept_name);
   const res = await fetch(
     "https://dataworks-7b7x.onrender.com/phone-api/audit/start-audit.php",
     {
@@ -173,18 +173,18 @@ async function startAuditFetch(dept) {
   const data = await res.json();
   const new_data = data.data;
 
-  console.log("New data length:", new_data.length);
+  //console.log("New data length:", new_data.length);
   for (let i = 0; i < new_data.length; i++) {
-    console.log(
+    /*console.log(
       "Inserting audit item:",
       new_data[i].asset_tag,
       new_data[i].asset_name
-    );
+    );*/
     insertIntoAuditing([new_data[i]]);
   }
-  console.log("Audit data inserted into SQLite for dept_name:", dept_name);
+  //console.log("Audit data inserted into SQLite for dept_name:", dept_name);
   const auditing_records = selectAllAuditing();
-  console.log("Auditing Records in SQLite:", auditing_records);
+  //console.log("Auditing Records in SQLite:", auditing_records);
   router.push({
     pathname: "/(auth)/audit",
     query: { status: "Logged In" },
@@ -221,12 +221,12 @@ export default function StartAudit() {
       if (data[0]["Asset Inservice and by Dept ID"] !== undefined) {
         data = XLSX.utils.sheet_to_json(ws, { range: 1 });
       }
-      console.log("Imported data:", data);
+      //console.log("Imported data:", data);
       for (let i = 0; i < data.length; i++) {
         insertIntoAuditingExcel([data[i]]);
       }
-      const auditing_records = await selectAllAuditing();
-      console.log("Auditing Records in SQLite:", auditing_records);
+      //const auditing_records = await selectAllAuditing();
+      //console.log("Auditing Records in SQLite:", auditing_records);
     } catch (e) {
       console.error(e);
       setError("Import failed.");
@@ -240,6 +240,7 @@ export default function StartAudit() {
   };
 
   async function loadDepartments() {
+    //console.log("Loading departments...");
     const dept_res = await fetch(
       "https://dataworks-7b7x.onrender.com/phone-api/get-all-depts.php",
       {
@@ -249,9 +250,17 @@ export default function StartAudit() {
         },
       }
     );
+    if (!dept_res.ok) {
+      console.error("Failed to load departments:", dept_res.status);
+      setError("Failed to load departments.");
+      return;
+    } 
+    //console.log("Departments response status:", dept_res.status);
     const depts = await dept_res.json();
+    //console.log("Departments loaded:", depts.data);
     setSampleItems(depts.data);
   }
+  //console.log("Sample items length:", sampleItems.length);
   if (sampleItems.length === 0) {
     loadDepartments();
   }
@@ -261,7 +270,7 @@ export default function StartAudit() {
       {/* Header to match (auth)/audit.jsx */}
       <View style={baseStyles.header}>
         <Text style={baseStyles.headerTitle}>Dataworks</Text>
-        <Text style={baseStyles.headerSubtitle}>Audit</Text>
+        <Text style={baseStyles.headerSubtitle}>Start Audit</Text>
       </View>
 
       {/* Upload card */}
@@ -285,7 +294,7 @@ export default function StartAudit() {
           initialSelected={[]}
           onChange={(dept_name) => {
             setSelected(dept_name);
-            console.log("Selected dept_name:", dept_name);
+            //console.log("Selected dept_name:", dept_name);
           }}
         />
       </View>

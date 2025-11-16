@@ -1,26 +1,26 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  FlatList,
-  StyleSheet,
-  Platform,
-  useWindowDimensions,
-  Alert,
-} from "react-native";
-import { useDispatch } from "react-redux";
 import { Camera, CameraView } from "expo-camera";
+import { useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useDispatch } from "react-redux";
 import useLocation from "../../hooks/useLocation";
 
 import {
-  initDb,
   getItem,
+  initDb,
+  selectAllAuditing, // ← used after inserts to verify
+  selectSingleAsset,
   updateAuditingFoundStatus,
-  selectAllAuditing,     // ← used after inserts to verify
-  selectSingleAsset,     // ← used to display found_status
 } from "../../src/sqlite";
 
 const COLORS = {
@@ -54,16 +54,18 @@ export default function AuditScreen() {
   // tag -> found_status
   const [statusMap, setStatusMap] = useState({});
 
+  const [auditData, setAuditData] = useState([]);
+
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
 
   const TABBAR = Platform.select({ ios: 64, android: 88, default: 72 });
   const ASSETS_LIST_HEIGHT = Math.max(240, Math.floor(screenH * 0.42));
-
+/*
   useEffect(() => {
     initDb().catch((e) => console.warn("DB init error:", e));
   }, []);
-
+*/
   // Refresh status map whenever scanned assets change
   useEffect(() => {
     let cancelled = false;
@@ -214,12 +216,17 @@ export default function AuditScreen() {
 
             const failed = [];
             for (const a of pickedAssets) {
+              console.log("Processing asset:", a);
               const tagStr = String(a.AssetTag ?? "");
               // Skip obvious non-tag scans (e.g., URLs)
-              if (!/^\d+$/.test(tagStr)) {
+              /*
+              if (!/^\d+$/.test(tagStr) && !/^A[SI]?\d+$/.test(tagStr)
+                && !/^S[RC]?\d+$/.test(tagStr) && !/^F[DN]?\d+$/.test(tagStr)
+                && !/^SP\d+$/.test(tagStr) ) {
                 failed.push(tagStr);
                 continue;
               }
+              */
               try {
                 await updateAuditingFoundStatus(
                   tagStr,
@@ -229,6 +236,8 @@ export default function AuditScreen() {
                   currentDoor.RoomTag, // found_room_tag
                   deptId                // dept_id for server lookup
                 );
+                //const assets = await selectAllAuditing();
+                //console.log("Auditing table after update:", assets);
               } catch (err) {
                 console.warn("updateAuditingFoundStatus failed:", tagStr, err);
                 failed.push(tagStr);
@@ -257,6 +266,7 @@ export default function AuditScreen() {
             console.warn("Save Work error:", e);
             alert("Failed to save audit.");
           } finally {
+            getAuditingData();
             setBusy(false);
           }
         },
@@ -264,6 +274,22 @@ export default function AuditScreen() {
     ]);
   };
 
+  const getAuditingData = async () => {
+    try {
+      const audit = await selectAllAuditing();
+      //console.log("Auditing data:", audit);
+      setAuditData(audit);
+      //console.log("Auditing data:", audit_data);
+      
+    } catch (e) {
+      console.warn("Error fetching auditing data:", e);
+      alert("Failed to fetch auditing data.");
+    }
+  };
+ if (auditData.length === 0) {
+    getAuditingData();
+  }
+  //console.log("Auditing data:", auditData);
   /** FINISH AUDIT */
   const finishAudit = async () => {
     Alert.alert(
@@ -324,7 +350,27 @@ export default function AuditScreen() {
       </View>
     );
   };
+  const renderTable = ({ item }) => {
+    //console.log("Rendering item:", item);
+    const tag = String(item.AssetTag);
+    const status = statusMap[tag] ?? "Pending";
+    const statusColor =
+      status === "Found" ? COLORS.green : status === "Extra" ? COLORS.orange : COLORS.gray;
 
+    return (
+      <View style={styles.assetRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.assetMain} numberOfLines={1}>
+            {item.tag} — {item.name}
+          </Text>
+          <Text style={styles.assetSub}>Tag: {item.tag} - Status {item.found_status}</Text>
+          <Text style={[styles.assetStatus, { color: statusColor }]}>
+            Status: {item.found_status ?? "Not-found"}
+          </Text>
+        </View>
+      </View>
+    );
+  }
   /* ===== Scanning full-screen ===== */
   if (scanning) {
     return (
@@ -442,8 +488,40 @@ export default function AuditScreen() {
             )}
           />
         )}
+        
+      </View>
+      <View style={[styles.card, styles.shadow]}>
+        <Text style={styles.sectionTitle}>Scanned Assets</Text>
+
+        {auditData.length === 0 ? (
+          <Text style={styles.hint}>Scan assets — they’ll appear here.</Text>
+        ) : (
+          <FlatList
+            data={auditData}
+              renderItem={renderTable}
+                          keyExtractor={(a) => a.tag}
+
+            style={{ height: ASSETS_LIST_HEIGHT }}
+            showsVerticalScrollIndicatorr
+            contentContainerStyle={{
+              gap: 8,
+              paddingBottom: 16 + TABBAR + insets.bottom + 16,
+            }}
+            ListFooterComponent={() => (
+              <View
+                style={{
+                  paddingTop: 8,
+                  marginBottom: TABBAR + insets.bottom + 24,
+                }}
+              >
+              </View>
+            )}
+          />
+        )}
+        
       </View>
     </View>
+    
   );
 }
 
