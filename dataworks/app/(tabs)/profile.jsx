@@ -1,27 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
-  Platform,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import {
+  addProfile,
+  auditProfile,
+  deleteProfile,
   getMyProfiles,
   getOtherProfiles,
-  searchProfilesByEmail,
-  addProfile,
   renameProfile,
-  deleteProfile,
-  auditProfile,
+  searchProfilesByEmail,
   viewOtherProfile,
 } from "../lib/api/profiles.jsx";
 
@@ -351,6 +351,7 @@ export default function ProfileScreen() {
               </View>
 
               {/* Other Users + Search */}
+              {/*
               <View style={[styles.panel, styles.shadow]}>
                 <Text style={styles.panelTitle}>Other Users Profiles</Text>
 
@@ -373,6 +374,7 @@ export default function ProfileScreen() {
                     <Text style={styles.btnText}>Search</Text>
                   </TouchableOpacity>
                 </View>
+                
 
                 {loading && others.length === 0 ? (
                   <ActivityIndicator
@@ -395,6 +397,7 @@ export default function ProfileScreen() {
                   />
                 )}
               </View>
+              */}
             </View>
           </>
         }
