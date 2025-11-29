@@ -1,6 +1,6 @@
-"use client";
 import { Camera, CameraView } from "expo-camera";
-import { useEffect, useRef, useState } from "react";
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -8,12 +8,16 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
 import useLocation from "../../hooks/useLocation";
+import { getData } from "../lib/store-login";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 import {
   getItem,
@@ -58,6 +62,12 @@ export default function AuditScreen() {
 
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
+
+  const dept_name = useLocalSearchParams().dept_name || "";
+  //console.log("Department Name from params:", dept_name);
+
+   // add this for the search
+  const [search, setSearch] = useState("");
 
   const TABBAR = Platform.select({ ios: 64, android: 88, default: 72 });
   const ASSETS_LIST_HEIGHT = Math.max(240, Math.floor(screenH * 0.42));
@@ -216,7 +226,7 @@ export default function AuditScreen() {
 
             const failed = [];
             for (const a of pickedAssets) {
-              console.log("Processing asset:", a);
+              //console.log("Processing asset:", a);
               const tagStr = String(a.AssetTag ?? "");
               // Skip obvious non-tag scans (e.g., URLs)
               /*
@@ -246,7 +256,7 @@ export default function AuditScreen() {
 
             // After inserting/updating, read the current auditing table
             const allAuditing = await selectAllAuditing();
-            console.log("Auditing table after inserts:", allAuditing);
+            //console.log("Auditing table after inserts:", allAuditing);
             alert(`Auditing table now contains ${allAuditing.length} rows.`);
 
             if (failed.length) {
@@ -289,6 +299,7 @@ export default function AuditScreen() {
  if (auditData.length === 0) {
     getAuditingData();
   }
+  //console.log("Search term:", search);
   //console.log("Auditing data:", auditData);
   /** FINISH AUDIT */
   const finishAudit = async () => {
@@ -302,13 +313,21 @@ export default function AuditScreen() {
           onPress: async () => {
             try {
               setBusy(true);
-              await initDb();
-
+              let email = await getData("email");
+              email = JSON.parse(email).value;
+              let pw = await getData("pw");
+              pw = JSON.parse(pw).value;
+              //await initDb();
+              const dept_name = await getData("audit_dept");
               const rows = await selectAllAuditing();
               const res = await fetch(COMPLETE_AUDIT_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ data: rows }),
+                body: JSON.stringify({ data: rows,
+                  dept_name: String(dept_name),
+                  email: String(email),
+                  pw: String(pw)
+                 }),
               });
 
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -351,6 +370,7 @@ export default function AuditScreen() {
     );
   };
   const renderTable = ({ item }) => {
+    //console.log("Rendering table item:", item);
     //console.log("Rendering item:", item);
     const tag = String(item.AssetTag);
     const status = statusMap[tag] ?? "Pending";
@@ -363,14 +383,47 @@ export default function AuditScreen() {
           <Text style={styles.assetMain} numberOfLines={1}>
             {item.tag} — {item.name}
           </Text>
-          <Text style={styles.assetSub}>Tag: {item.tag} - Status {item.found_status}</Text>
+          <Text style={styles.assetSub}>Serial: {item.serial} - Dept Name {item.dept_id}</Text>
           <Text style={[styles.assetStatus, { color: statusColor }]}>
             Status: {item.found_status ?? "Not-found"}
           </Text>
         </View>
       </View>
-    );
+    );  
   }
+  const filteredAuditData = useMemo(() => {
+    const q = (search || "").trim().toLowerCase();
+    //console.log("Filtering audit data with query:", q);
+    if (!q) return auditData;
+
+     return auditData.filter((row) => {
+      const tag = String(row.tag ?? row.AssetTag ?? "").toLowerCase();
+      //console.log("Checking row:", row, "Tag:", tag, ' against query:', q);
+      const name = String(row.name ?? row.Description ?? "").toLowerCase();
+      const serial = String(row.serial ?? row.Serial ?? "").toLowerCase();
+      /*if (tag.includes(q) || name.includes(q) || serial.includes(q)) return tag;*/
+      return tag.includes(q) || name.includes(q) || serial.includes(q);
+    });
+  }, [search, auditData]);
+// kinda forgot where i put this but it was lower in the code
+
+
+/*
+  {filteredAuditData.length === 0 ? (
+    <Text style={styles.hint}>No matching assets.</Text>
+  ) : (
+    <FlatList
+      data={filteredAuditData}
+      renderItem={renderTable}
+      keyExtractor={(a, i) => String(a.tag ?? a.AssetTag ?? i)}
+      style={{ height: ASSETS_LIST_HEIGHT }}
+      showsVerticalScrollIndicator
+      contentContainerStyle={{
+        gap: 8,
+        paddingBottom: 16 + TABBAR + insets.bottom + 16,
+      }}
+    />
+  )}*/
   /* ===== Scanning full-screen ===== */
   if (scanning) {
     return (
@@ -490,14 +543,53 @@ export default function AuditScreen() {
         )}
         
       </View>
+      
       <View style={[styles.card, styles.shadow]}>
-        <Text style={styles.sectionTitle}>Scanned Assets</Text>
+        {/* Assets In Audit /}
+<View style={[styles.card, styles.shadow]}>
+  <Text style={styles.sectionTitle}>Assets In Audit</Text>
+
+  {/* Search bar */}
+        <TextInput
+      value={search}
+      onChangeText={setSearch}
+      placeholder="Search by tag, name, or serial…"
+      placeholderTextColor={COLORS.gray}
+      style={{
+        flex: 1,
+        height: 42,
+        borderColor: COLORS.border,
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        backgroundColor: "#FAFAFA",
+        color: COLORS.primary,
+      }}
+      autoCapitalize="none"
+      autoCorrect={false}
+      clearButtonMode="while-editing"
+      returnKeyType="search"
+    />
+    <Pressable
+      onPress={() => setSearch("")}
+      style={{
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: COLORS.primary,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ color: COLORS.white, fontWeight: "700" }}>Clear</Text>
+    </Pressable>
+        <Text style={styles.sectionTitle}>Assets</Text>
 
         {auditData.length === 0 ? (
-          <Text style={styles.hint}>Scan assets — they’ll appear here.</Text>
+          <Text style={styles.hint}>No Assets in Audit.</Text>
         ) : (
           <FlatList
-            data={auditData}
+            data={filteredAuditData ?? auditData}
               renderItem={renderTable}
                           keyExtractor={(a) => a.tag}
 

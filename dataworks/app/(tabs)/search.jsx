@@ -13,6 +13,8 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import DropDownPicker from "react-native-dropdown-picker";
 import Icon from "react-native-vector-icons/FontAwesome";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 export default function SearchAssetsScreen() {
   const { results: resultsParam } = useLocalSearchParams();
@@ -57,6 +59,10 @@ export default function SearchAssetsScreen() {
       const q = (query || "").trim();
 
       if (q.length >= 3 || q.length === 0) {
+        let email = await getData("email");
+        email = JSON.parse(email).value;
+        let pw = await getData("pw");
+        pw = JSON.parse(pw).value;
         if (value === "asset" || value === null) {
           // console.log("Searching items with query:", q, limit, skip);
           const assetsRes = await fetch(
@@ -64,7 +70,7 @@ export default function SearchAssetsScreen() {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q }),
+              body: JSON.stringify({ offset: skip, limit: limit, search: q, email, pw }),
             }
           );
           const assetsJson = await assetsRes.json();
@@ -76,7 +82,7 @@ export default function SearchAssetsScreen() {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q }),
+              body: JSON.stringify({ offset: skip, limit: limit, search: q, email, pw }),
             }
           );
           const assetsJson = await assetsRes.json();
@@ -89,7 +95,7 @@ export default function SearchAssetsScreen() {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q }),
+              body: JSON.stringify({ offset: skip, limit: limit, search: q, email, pw }),
             }
           );
           const assetsJson = await assetsRes.json();

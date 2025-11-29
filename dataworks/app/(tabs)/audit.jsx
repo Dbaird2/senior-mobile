@@ -154,7 +154,11 @@ function ListSelector({
 
 async function startAuditFetch(dept) {
   const dept_name = dept[0];
-  await initDb();
+  //await initDb();
+  let email = await getData("email");
+  email = JSON.parse(email).value;
+  let pw = await getData("pw");
+  pw = JSON.parse(pw).value;
 
   //console.log("Starting audit for dept_name:", dept_name);
   const res = await fetch(
@@ -166,6 +170,8 @@ async function startAuditFetch(dept) {
       },
       body: JSON.stringify({
         dept_name: dept_name,
+        email: email,
+        pw: pw,
       }),
     }
   );
@@ -201,7 +207,7 @@ export default function StartAudit() {
   const pickExcel = async () => {
     setError("");
     setLoading(true);
-    await initDb();
+    //await initDb();
     try {
       const res = await DocumentPicker.getDocumentAsync({
         multiple: false,
@@ -241,6 +247,10 @@ export default function StartAudit() {
 
   async function loadDepartments() {
     //console.log("Loading departments...");
+    let email = await getData("email");
+    email = JSON.parse(email).value;
+    let pw = await getData("pw");
+    pw = JSON.parse(pw).value;
     const dept_res = await fetch(
       "https://dataworks-7b7x.onrender.com/phone-api/get-all-depts.php",
       {
@@ -248,6 +258,7 @@ export default function StartAudit() {
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ email: email, pw: pw }),
       }
     );
     if (!dept_res.ok) {
@@ -486,4 +497,3 @@ const listStyles = StyleSheet.create({
     color: COLORS.gray,
   },
 });
-
