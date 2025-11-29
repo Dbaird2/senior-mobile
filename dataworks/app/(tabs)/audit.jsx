@@ -1,6 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as XLSX from "xlsx";
+import { getData } from "../lib/store-login";
 
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
@@ -17,10 +18,9 @@ import {
 } from "react-native";
 import {
   deleteAuditingTable,
-  initDb,
   insertIntoAuditing,
   insertIntoAuditingExcel,
-  selectAllAuditing,
+  selectAllAuditing
 } from "../../src/sqlite.jsx";
 
 /**

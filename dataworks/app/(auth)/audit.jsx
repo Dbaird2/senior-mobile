@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
 import useLocation from "../../hooks/useLocation";
 import { getData } from "../lib/store-login";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 
 import {

@@ -1,21 +1,20 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  FlatList,
-  TouchableOpacity,
-  Animated,
-  StatusBar,
-  Platform,
-} from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { getData } from "../lib/store-login";
+
+import {
+  Animated,
+  FlatList,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import Icon from "react-native-vector-icons/FontAwesome";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 
 export default function SearchAssetsScreen() {
@@ -67,34 +66,37 @@ export default function SearchAssetsScreen() {
         let pw = await getData("pw");
         pw = JSON.parse(pw).value;
         if (value === "asset" || value === null) {
+          console.log('Fetching assets');
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-asset-offset.php",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q, email, pw }),
+              body: JSON.stringify({ offset: skip, limit: limit, search: q, email: email, pw: pw}),
             }
           );
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
         } else if (value === "department") {
+          console.log("Fetching departments");
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-dept-offset.php",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q, email, pw }),
+              body: JSON.stringify({ offset: skip, limit: limit, search: q, email: email, pw: pw}),
             }
           );
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
+          console.log('Asset Res',assetsRes);
         } else if (value === "building") {
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-bldg-offset.php",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offset: skip, limit: limit, search: q, email, pw }),
+              body: JSON.stringify({ offset: skip, limit: limit, search: q, email: email, pw: pw }),
             }
           );
           const assetsJson = await assetsRes.json();

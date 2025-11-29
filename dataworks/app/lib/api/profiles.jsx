@@ -93,8 +93,8 @@ export async function searchProfilesByEmail(email) {
   const data = await handle(res);
   return data; // [{id,email,profileName}]
 }
+*/
 
-/** Add
 export async function addProfile(name) {
   const res = await fetch(`${API_BASE_URL}/api/profiles`, {
     method: "POST",
@@ -103,7 +103,7 @@ export async function addProfile(name) {
   });
   const p = await handle(res);
   return { id: p.id ?? p.profileId, name: p.name ?? p.profileName };
-}*/
+}
 
 /** Rename **/
 export async function renameProfile(old_name, new_name) {
