@@ -1,17 +1,17 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import {
-  View,
-  TextInput,
-  StyleSheet,
   Alert,
-  Text,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { router } from "expo-router";
+import { checkUser, initDb, logUserInfo } from "../../src/sqlite";
 import { storeLogin } from "../lib/store-login";
-import { initDb, logUserInfo, checkUser } from "../../src/sqlite";
 
 const LOGIN_PATH = "/phone-api/check-login.php";
 
@@ -37,6 +37,8 @@ export default function LoginScreen() {
       Alert.alert("Missing fields", "Please enter email and password.");
       return;
     }
+    initDb();
+
 
     setLoading(true);
     //try {
@@ -75,15 +77,14 @@ export default function LoginScreen() {
     key = 0;
     let user;
     if (data.status === "success") {
-      user = await checkUser(email);
+      //user = await checkUser(email);
       // console.log("Final email/username:", email, username);
       if (user === undefined || user.length === 0) {
-        initDb();
-        const res = await logUserInfo(email, username);
+        logUserInfo(email, username);
         // console.log("New user logged:", res);
         // console.log("User created:", email, username);
       }
-      user = await checkUser(email);
+      //user = await checkUser(email);
       // console.log(user);
       // console.log("Login successful, key saved." + key);
 
@@ -92,7 +93,7 @@ export default function LoginScreen() {
       storeLogin("pw", password);
 
       router.push({
-        pathname: "/(tabs)/audit",
+        pathname: "/",
         query: { status: "Logged In" },
       });
     }

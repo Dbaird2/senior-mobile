@@ -9,6 +9,8 @@ import {
   FlatList,
   TouchableOpacity,
   Animated,
+  StatusBar,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import DropDownPicker from "react-native-dropdown-picker";
@@ -37,6 +39,7 @@ export default function SearchAssetsScreen() {
   const isLoadingRef = useRef(false);
 
   const [opacity] = useState(new Animated.Value(0));
+
   useEffect(() => {
     const t = setTimeout(() => {
       Animated.timing(opacity, {
@@ -47,8 +50,8 @@ export default function SearchAssetsScreen() {
     }, 600);
     return () => clearTimeout(t);
   }, []);
+
   useEffect(() => {
-    // console.log("Search Params: ", resultsParam);
     let alive = true;
 
     const run = async () => {
@@ -64,7 +67,6 @@ export default function SearchAssetsScreen() {
         let pw = await getData("pw");
         pw = JSON.parse(pw).value;
         if (value === "asset" || value === null) {
-          // console.log("Searching items with query:", q, limit, skip);
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-asset-offset.php",
             {
@@ -76,7 +78,6 @@ export default function SearchAssetsScreen() {
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
         } else if (value === "department") {
-          // console.log("Searching departments with query:", q, limit, skip);
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-dept-offset.php",
             {
@@ -87,9 +88,7 @@ export default function SearchAssetsScreen() {
           );
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
-          // console.log("Fetched departments length:", results.current);
         } else if (value === "building") {
-          // console.log("Searching buildings with query:", q);
           const assetsRes = await fetch(
             "https://dataworks-7b7x.onrender.com/phone-api/search-info/get-bldg-offset.php",
             {
@@ -100,17 +99,13 @@ export default function SearchAssetsScreen() {
           );
           const assetsJson = await assetsRes.json();
           results.current = assetsJson?.data || [];
-          // console.log("Fetched buildings length:", results.current);
         }
 
         if (!alive) return;
-        // console.log(results.current);
-        // console.log("In Run Function: ", results.current.length);
-        // console.log("Setting refresh key", refreshKey);
       }
+
       setRefreshKey((prev) => prev + 1);
       isLoadingRef.current = false;
-
       setLoading(false);
     };
 
@@ -136,7 +131,7 @@ export default function SearchAssetsScreen() {
       style={[
         styles.row,
         selected &&
-        (item.tag === selected.tag || item.dept_id === selected.dept_id)
+        (item.tag === selected?.tag || item.dept_id === selected?.dept_id)
           ? styles.rowActive
           : null,
       ]}
@@ -179,17 +174,21 @@ export default function SearchAssetsScreen() {
   };
 
   const checkSearchType = ({ item }) => {
-    if (value === "building") {
-      return renderBuilding({ item });
-    } else if (value === "department") {
-      return renderDept({ item });
-    } else {
-      return renderAsset({ item });
-    }
+    if (value === "building") return renderBuilding({ item });
+    if (value === "department") return renderDept({ item });
+    return renderAsset({ item });
   };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Search</Text>
+      {/* Blue header bar */}
+      <>
+        <StatusBar barStyle="light-content" backgroundColor="#003594" />
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Dataworks</Text>
+          <Text style={styles.headerSubtitle}>Search</Text>
+        </View>
+      </>
 
       <View style={styles.ddpWrapper}>
         <DropDownPicker
@@ -203,7 +202,7 @@ export default function SearchAssetsScreen() {
           style={styles.ddp}
           dropDownContainerStyle={styles.ddpDropdown}
           listItemContainerStyle={styles.ddpItem}
-          itemSeparator={true}
+          itemSeparator
           itemSeparatorStyle={styles.ddpItemSeparator}
           selectedItemContainerStyle={styles.ddpItemSelected}
           selectedItemLabelStyle={styles.ddpItemLabelSelected}
@@ -261,6 +260,7 @@ export default function SearchAssetsScreen() {
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 32 }}
         ListEmptyComponent={<Text style={styles.empty}>No results</Text>}
       />
+
       <Animated.View style={[styles.paginationContainer, { opacity }]}>
         <TouchableOpacity
           onPress={() => setOffset((o) => Math.max(0, o - 30))}
@@ -295,19 +295,11 @@ export default function SearchAssetsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F7FB",
+    backgroundColor: "#F5E6BD",
     padding: 12,
-    paddingTop: 20,
+    paddingTop: 0, // header manages top spacing
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 20,
-    marginTop: 80,
-    color: "#003594",
-    letterSpacing: 0.3,
-  },
+
   input: {
     backgroundColor: "#FFFFFF",
     color: "#0A0A0A",
@@ -319,6 +311,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#003594",
   },
+
   card: {
     backgroundColor: "#FFFFFF",
     marginTop: 10,
@@ -343,6 +336,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#003594",
   },
+
   row: {
     backgroundColor: "#FFFFFF",
     padding: 12,
@@ -452,5 +446,37 @@ const styles = StyleSheet.create({
     color: "#003594",
     fontWeight: "600",
     letterSpacing: 0.2,
+  },
+
+  header: {
+    backgroundColor: "#003594",
+    paddingTop:
+      (Platform.OS === "android" ? StatusBar.currentHeight || 0 : 44) + 10,
+    paddingBottom: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: -12,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.5,
+    elevation: 4,
+  },
+
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+
+  headerSubtitle: {
+    color: "#FFC72C",
+    fontSize: 15,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
 });
