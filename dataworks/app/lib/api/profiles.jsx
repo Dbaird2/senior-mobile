@@ -1,11 +1,11 @@
 // lib/api/profiles.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
-import { getData } from "../store-login";
+import { getData, storeLogin } from "../store-login";
 import {
-  insertAuditInfo,
-  getAllAuditing,
-  deleteAuditingData,
+  insertIntoAuditing,
+  selectAllAuditing,
+  deleteAuditingTable,
 } from "../../../src/sqlite";
 import { router } from "expo-router";
 
@@ -164,17 +164,18 @@ export async function deleteProfile(name) {
 
 /** Audit */
 export async function auditProfile(name) {
+  //console.log("Starting audit for profile:", name);
   let email = await getData("email");
   email = JSON.parse(email).value;
 
   let pw = await getData("pw");
   pw = JSON.parse(pw).value;
 
-  console.log(name.name);
+  //console.log(name.name);
   let profile_name = name.name.trim();
   const res = await fetch(`${API_BASE_URL}${AUDIT_PROFILES_PATH}`, {
     method: "POST",
-    headers: await authHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email: email,
       pw: pw,
@@ -187,7 +188,8 @@ export async function auditProfile(name) {
 
   if (text.status === "Ok") {
   }
-  await deleteAuditingData();
+  await deleteAuditingTable();
+  //console.log("Old audit data cleared.");
   //return handle(res); // optional: returns job id
   for (const p of text.profiles) {
     let assigned_to = "";
@@ -219,29 +221,15 @@ export async function auditProfile(name) {
       p.audit_id || 1,
       p.asset_notes || "N/A"
     );*/
-    await insertAuditInfo(
-      p.asset_tag,
-      p.asset_name,
-      p.dept_id,
-      p.serial_num || "N/A",
-      p.po || "N/A",
-      p.asset_model || "N/A",
-      p.make || "N/A",
-      p.room_tag,
-      p.type2 || "N/A",
-      p.bus_unit,
-      p.status || "In Service",
-      assigned_to || "N/A",
-      p.date_added || "N/A",
-      p.asset_price || 0,
-      p.audit_id || 1,
-      p.asset_notes || "N/A"
+    insertIntoAuditing(
+     [p], assigned_to
     );
   }
-  const audit_data = await getAllAuditing();
+  storeLogin("audit_dept", text.profiles[0].dept_id);
+  //const audit_data = await selectAllAuditing();
   //console.log("Audit data inserted:", audit_data);
   router.push({
-    pathname: "/(tabs)/audit",
+    pathname: "/(auth)/audit",
     query: { from: "Profiles" },
   });
 }

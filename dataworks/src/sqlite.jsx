@@ -560,10 +560,28 @@ export async function insertIntoAuditing([item]) {
 } catch (error) {
   console.error("Error inserting into auditing:", error);
 }
-  db.closeAsync();
+  //db.closeAsync();
 }
 
-export async function insertIntoAuditingExcel([item]) {
+export async function insertIntoAuditingExcel([item], assigned_to) {
+  try {
+  const db = await getDb();
+
+  db.runAsync(
+    `INSERT OR REPLACE INTO auditing 
+      (tag, name, dept_id, serial, po, location, bus_unit, assigned_to, purchase_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    [
+      item.asset_tag, item.asset_name, item.dept_id, item.serial_num || 'N/A', item.po || 'N/A' , item.room_tag, item.bus_unit, assigned_to || 'N/A', item.date_added || 'N/A'
+    ]
+  );
+} catch (error) {
+  console.error("Error inserting into auditing:", error);
+}
+  //db.closeAsync();
+}
+
+export async function insertIntoAuditingProfile([item]) {
   try {
   const db = await getDb();
   let assigned_to = '';
@@ -579,8 +597,9 @@ export async function insertIntoAuditingExcel([item]) {
 } catch (error) {
   console.error("Error inserting into auditing:", error);
 }
-  db.closeAsync();
+  //db.closeAsync();
 }
+
 export async function selectAllAuditing() {
   const db = await getDb();
   return db.getAllAsync(`SELECT * FROM auditing ORDER BY tag DESC`);
