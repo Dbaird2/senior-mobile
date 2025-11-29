@@ -1,69 +1,215 @@
-import React, { useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  ScrollView,
-} from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as XLSX from "xlsx";
-import { useDispatch, useSelector } from "react-redux";
-import { setData, toggleColumn, showColumn } from "../auditSlice";
 
-export default function AuditScreen() {
-  const dispatch = useDispatch();
+import { router } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import {
+  FlatList,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import {
+  deleteAuditingTable,
+  initDb,
+  insertIntoAuditing,
+  insertIntoAuditingExcel,
+  selectAllAuditing,
+} from "../../src/sqlite.jsx";
 
-  // pull redux state (including byHeader JSON)
-  const { fileInfo, rows, columns, hiddenCols } = useSelector((state) => state.audit);
+/**
+ * Simple, reusable ListSelector for React Native
+ *
+ * Props:
+ * - items: Array<{ dept_name: string, dept_id?: string }>
+ * - multi?: boolean (default false)
+ * - initialSelected?: Array<string>
+ * - onChange?: (selected: Array<string>) => void
+ */
 
+const COLORS = {
+  primary: "#003594",
+  gold: "#FFC72C",
+  cream: "#F5E6BD",
+  gray: "#707372",
+  red: "#E74C3C",
+  white: "#FFFFFF",
+  border: "#DDDDDD",
+};
+
+// Reserve space so rows never sit behind the fixed bottom button.
+const BOTTOM_BUTTON_SPACE = 120; // height of button + comfy buffer
+
+function ListSelector({
+  items = [],
+  multi = false,
+  initialSelected = [],
+  onChange,
+  placeholder = "Search...",
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState(
+    Array.isArray(initialSelected) ? initialSelected : []
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (it) =>
+        (it.dept_name && it.dept_name.toLowerCase().includes(q)) ||
+        (it.dept_id && it.dept_id.toLowerCase().includes(q))
+    );
+  }, [items, query]);
+
+  const toggle = useCallback(
+    (dept_name) => {
+      // single-select behavior (unchanged logic)
+      setSelectedIds([dept_name]);
+      onChange && onChange([dept_name]);
+    },
+    [onChange]
+  );
+
+  const isSelected = useCallback(
+    (dept_name) => selectedIds.includes(dept_name),
+    [selectedIds]
+  );
+
+  const clear = useCallback(() => {
+    setSelectedIds([]);
+    onChange && onChange([]);
+  }, [onChange]);
+
+  const renderItem = ({ item }) => {
+    const selected = isSelected(item.dept_name);
+    return (
+      <TouchableOpacity
+        onPress={() => toggle(item.dept_name)}
+        style={[listStyles.item, selected && listStyles.itemSelected]}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+      >
+        <View style={listStyles.itemText}>
+          <Text style={[listStyles.label, selected && listStyles.labelSelected]}>
+            {item.dept_name}
+          </Text>
+          {item.dept_id ? (
+            <Text style={listStyles.dept_id}>{item.dept_id}</Text>
+          ) : null}
+        </View>
+        <View style={listStyles.check}>
+          <Text style={[listStyles.checkText, selected && listStyles.checkTextOn]}>
+            {selected ? "✓" : ""}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={listStyles.container}>
+      <View style={listStyles.controlsRow}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.gray}
+          style={listStyles.search}
+          clearButtonMode="while-editing"
+        />
+        <TouchableOpacity onPress={clear} style={listStyles.controlButton}>
+          <Text style={listStyles.controlText}>Clear</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[listStyles.card, baseStyles.shadow, { padding: 0 }]}>
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => String(item.dept_name)}
+          renderItem={renderItem}
+          ItemSeparatorComponent={() => <View style={listStyles.separator} />}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{
+            paddingVertical: 6,
+            paddingBottom: BOTTOM_BUTTON_SPACE, // <-- ensures last rows clear the button
+          }}
+          ListEmptyComponent={() => (
+            <View style={listStyles.empty}>
+              <Text style={listStyles.emptyText}>No items</Text>
+            </View>
+          )}
+          ListFooterComponent={<View style={{ height: 8 }} />}
+        />
+      </View>
+    </View>
+  );
+}
+
+async function startAuditFetch(dept) {
+  const dept_name = dept[0];
+  //await initDb();
+  let email = await getData("email");
+  email = JSON.parse(email).value;
+  let pw = await getData("pw");
+  pw = JSON.parse(pw).value;
+
+  //console.log("Starting audit for dept_name:", dept_name);
+  const res = await fetch(
+    "https://dataworks-7b7x.onrender.com/phone-api/audit/start-audit.php",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dept_name: dept_name,
+        email: email,
+        pw: pw,
+      }),
+    }
+  );
+  await deleteAuditingTable();
+  const data = await res.json();
+  const new_data = data.data;
+
+  //console.log("New data length:", new_data.length);
+  for (let i = 0; i < new_data.length; i++) {
+    /*console.log(
+      "Inserting audit item:",
+      new_data[i].asset_tag,
+      new_data[i].asset_name
+    );*/
+    insertIntoAuditing([new_data[i]]);
+  }
+  //console.log("Audit data inserted into SQLite for dept_name:", dept_name);
+  const auditing_records = selectAllAuditing();
+  //console.log("Auditing Records in SQLite:", auditing_records);
+  router.push({
+    pathname: "/(auth)/audit",
+    query: { status: "Logged In" },
+  });
+}
+
+export default function StartAudit() {
+  const [sampleItems, setSampleItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selected, setSelected] = useState([]);
 
-  // ====== CONFIG ======
-  const COL_WIDTH = 140;
-  const ROW_HEIGHT = 40;
-  const HEADER_H = 46;
-  const MAX_VISIBLE_ROWS = 40;
-  // ====================
-
-  // ---- Derived values (hooks at top, NOT inside JSX) ----
-  const visibleColumns = useMemo(
-    () => columns.filter((c) => !hiddenCols[c]),
-    [columns, hiddenCols]
-  );
-
-  const hiddenList = useMemo(
-    () => columns.filter((c) => !!hiddenCols[c]),
-    [columns, hiddenCols]
-  );
-
-  const tableWidth = useMemo(
-    () => Math.max(visibleColumns.length * COL_WIDTH, 1),
-    [visibleColumns.length]
-  );
-
-  const listHeight = useMemo(
-    () => Math.min(rows.length, MAX_VISIBLE_ROWS) * ROW_HEIGHT,
-    [rows.length]
-  );
-  // -------------------------------------------------------
-
+  /* ===== Upload (logic unchanged) ===== */
   const pickExcel = async () => {
     setError("");
     setLoading(true);
-
+    //await initDb();
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: [
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "application/vnd.ms-excel",
-          "text/csv",
-          "*/*",
-        ],
         multiple: false,
         copyToCacheDirectory: true,
       });
@@ -71,230 +217,283 @@ export default function AuditScreen() {
         setLoading(false);
         return;
       }
-
-      const file = res.assets?.[0];
-      const nextFileInfo = {
-        name: file.name,
-        size: file.size,
-        uri: file.uri,
-        mimeType: file.mimeType,
-      };
-
+      const file = res.assets[0];
       const base64 = await FileSystem.readAsStringAsync(file.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
       const wb = XLSX.read(base64, { type: "base64" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-
-      // Detect header row (first fully-filled row)
-      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-      const maxCols = aoa.reduce((m, r) => Math.max(m, r.length), 0);
-      const headerIndex = aoa.findIndex(
-        (r) =>
-          r.length === maxCols &&
-          r.slice(0, maxCols).every((c) => String(c).trim() !== "")
-      );
-      const headerRow = headerIndex >= 0 ? aoa[headerIndex] : aoa[0] || [];
-
-      // Build ALL column names, ensure non-empty & unique
-      let cols = headerRow.map((c, i) =>
-        String(c).trim() ? String(c).trim() : `Column_${i + 1}`
-      );
-      const seen = new Map();
-      cols = cols.map((name) => {
-        const n = seen.get(name) || 0;
-        seen.set(name, n + 1);
-        return n === 0 ? name : `${name}_${n + 1}`;
-      });
-
-      // Remaining rows -> objects keyed by detected headers
-      const dataRows = (headerIndex >= 0 ? aoa.slice(headerIndex + 1) : aoa.slice(1)).map((r) => {
-        const o = {};
-        cols.forEach((col, i) => {
-          o[col] = r[i] ?? "";
-        });
-        return o;
-      });
-
-      // Store in Redux (your slice will also build state.audit.byHeader)
-      dispatch(setData({ fileInfo: nextFileInfo, columns: cols, rows: dataRows }));
+      let data = XLSX.utils.sheet_to_json(ws);
+      if (data[0]["Asset Inservice and by Dept ID"] !== undefined) {
+        data = XLSX.utils.sheet_to_json(ws, { range: 1 });
+      }
+      //console.log("Imported data:", data);
+      for (let i = 0; i < data.length; i++) {
+        insertIntoAuditingExcel([data[i]]);
+      }
+      //const auditing_records = await selectAllAuditing();
+      //console.log("Auditing Records in SQLite:", auditing_records);
     } catch (e) {
-      console.log(e);
-      setError("Could not read that file. Try a .xlsx, .xls, or .csv.");
+      console.error(e);
+      setError("Import failed.");
     } finally {
       setLoading(false);
+      router.push({
+        pathname: "/(auth)/audit",
+        query: { status: "Logged In" },
+      });
     }
   };
 
-  const Header = () => (
-    <View style={[styles.headerRow, { height: HEADER_H, width: tableWidth }]}>
-      {visibleColumns.map((c, i) => (
-        <Pressable
-          key={`hdr-${i}-${c}`}
-          onPress={() => dispatch(toggleColumn(c))}
-          style={[styles.headerCell, { width: COL_WIDTH, height: HEADER_H }]}
-          android_ripple={{ color: "#e5e7eb" }}
-        >
-          <Text style={styles.headerText} numberOfLines={1}>
-            {c}
-          </Text>
-          <Text style={styles.headerHint}>tap to hide</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-
-  const Row = ({ item, index }) => (
-    <View
-      style={[
-        styles.row,
-        index % 2 ? styles.altRow : null,
-        { width: tableWidth, height: ROW_HEIGHT },
-      ]}
-    >
-      {visibleColumns.map((c, i) => (
-        <View
-          key={`cell-${index}-${i}-${c}`}
-          style={[styles.cell, { width: COL_WIDTH, height: ROW_HEIGHT }]}
-        >
-          <Text numberOfLines={1}>{String(item[c] ?? "")}</Text>
-        </View>
-      ))}
-    </View>
-  );
+  async function loadDepartments() {
+    //console.log("Loading departments...");
+    let email = await getData("email");
+    email = JSON.parse(email).value;
+    let pw = await getData("pw");
+    pw = JSON.parse(pw).value;
+    const dept_res = await fetch(
+      "https://dataworks-7b7x.onrender.com/phone-api/get-all-depts.php",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: email, pw: pw }),
+      }
+    );
+    if (!dept_res.ok) {
+      console.error("Failed to load departments:", dept_res.status);
+      setError("Failed to load departments.");
+      return;
+    } 
+    //console.log("Departments response status:", dept_res.status);
+    const depts = await dept_res.json();
+    //console.log("Departments loaded:", depts.data);
+    setSampleItems(depts.data);
+  }
+  //console.log("Sample items length:", sampleItems.length);
+  if (sampleItems.length === 0) {
+    loadDepartments();
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Audit</Text>
+    <SafeAreaView style={baseStyles.screen}>
+      {/* Header to match (auth)/audit.jsx */}
+      <View style={baseStyles.header}>
+        <Text style={baseStyles.headerTitle}>Dataworks</Text>
+        <Text style={baseStyles.headerSubtitle}>Start Audit</Text>
+      </View>
 
-      <Pressable style={styles.button} onPress={pickExcel}>
-        <Text style={styles.buttonText}>Upload Excel / CSV</Text>
+      {/* Upload card */}
+      <View style={[baseStyles.card, baseStyles.shadow]}>
+        <Pressable
+          style={[baseStyles.btn, baseStyles.btnOutline, { marginTop: 6 }]}
+          onPress={pickExcel}
+        >
+          <Text style={baseStyles.btnOutlineText}>Upload Excel / CSV</Text>
+        </Pressable>
+        {error ? (
+          <Text style={{ color: COLORS.red, marginTop: 8 }}>{error}</Text>
+        ) : null}
+      </View>
+
+      {/* Selector list */}
+      <View style={{ flex: 1 }}>
+        <ListSelector
+          items={sampleItems}
+          multi={true}
+          initialSelected={[]}
+          onChange={(dept_name) => {
+            setSelected(dept_name);
+            //console.log("Selected dept_name:", dept_name);
+          }}
+        />
+      </View>
+
+      {/* Fixed bottom primary button */}
+      <Pressable
+        onPress={() => startAuditFetch(selected)}
+        style={({ pressed }) => [
+          baseStyles.bottomBar,
+          pressed && { opacity: 0.9 },
+        ]}
+      >
+        <Text style={baseStyles.bottomBarText}>
+          {selected.length
+            ? `Start Audit — ${selected.join(", ")}`
+            : "Start Audit"}
+        </Text>
       </Pressable>
-
-      {loading && <ActivityIndicator size="large" />}
-
-      {fileInfo && !loading && (
-        <View style={{ marginTop: 12 }}>
-          <Text style={styles.meta}>File: {fileInfo.name}</Text>
-          {!!fileInfo.size && (
-            <Text style={styles.meta}>Size: {fileInfo.size} bytes</Text>
-          )}
-        </View>
-      )}
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {/* Example of using byHeader (optional debug) */}
-      {/* <Text>{JSON.stringify(byHeader?.["Serial ID"]?.slice(0,5))}</Text> */}
-
-      {/* Hidden columns restore bar */}
-      {hiddenList.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginTop: 8 }}
-        >
-          {hiddenList.map((c, i) => (
-            <Pressable
-              key={`hidden-${i}-${c}`}
-              onPress={() => dispatch(showColumn(c))}
-              style={styles.restoreChip}
-              android_ripple={{ color: "#e5e7eb" }}
-            >
-              <Text style={styles.restoreText}>Show: {c}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Horizontal scrollable table with max 40 visible rows */}
-      {rows.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          contentContainerStyle={{ paddingTop: 8 }}
-        >
-          <View
-            style={[
-              styles.tableBox,
-              { width: tableWidth, maxHeight: HEADER_H + listHeight },
-            ]}
-          >
-            <Header />
-            <FlatList
-              data={rows}
-              keyExtractor={(_, idx) => String(idx)}
-              renderItem={Row}
-              showsVerticalScrollIndicator
-              style={{ width: tableWidth, height: listHeight }}
-              initialNumToRender={40}
-              maxToRenderPerBatch={50}
-              windowSize={10}
-              removeClippedSubviews
-              getItemLayout={(_, index) => ({
-                length: ROW_HEIGHT,
-                offset: ROW_HEIGHT * index,
-                index,
-              })}
-            />
-          </View>
-        </ScrollView>
-      )}
-    </View>
+      {/* Safe spacing is handled by BOTTOM_BUTTON_SPACE in the list */}
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, paddingTop: 60, backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 12, textAlign: "center" },
-  button: {
-    alignSelf: "center",
-    paddingVertical: 10,
+/* ===== Shared “auth theme” styles ===== */
+const baseStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.cream,
+  },
+
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingTop: Platform.OS === "ios" ? 0 : 40,
+    paddingBottom: 18,
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: COLORS.white,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: COLORS.gold,
+    fontWeight: "600",
+  },
+
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+
+  btn: {
     paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnPrimary: { backgroundColor: COLORS.primary },
+  btnOutline: {
+    backgroundColor: COLORS.white,
     borderWidth: 1,
+    borderColor: COLORS.primary,
   },
-  buttonText: { fontSize: 16, fontWeight: "600" },
-  meta: { marginTop: 4, fontSize: 14 },
-  error: { color: "red", marginTop: 10 },
+  btnText: { color: COLORS.white, fontWeight: "700", fontSize: 14 },
+  btnOutlineText: { color: COLORS.primary, fontWeight: "700", fontSize: 14 },
 
-  // restore chips
-  restoreChip: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#f9fafb",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    marginRight: 8,
-  },
-  restoreText: { fontSize: 12, color: "#111827", fontWeight: "500" },
-
-  // table box
-  tableBox: {
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: "hidden",
-    backgroundColor: "#fff",
-    borderColor: "#d1d5db",
+  shadow: {
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
 
-  headerRow: {
-    flexDirection: "row",
-    backgroundColor: "#f2f6ff",
-    borderBottomWidth: 1,
-    borderColor: "#cfe0ff",
+  bottomBar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  headerCell: { paddingHorizontal: 10, justifyContent: "center" },
-  headerText: { fontWeight: "700" },
-  headerHint: { fontSize: 10, color: "#6b7280" },
-
-  row: {
-    flexDirection: "row",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e5e7eb",
+  bottomBarText: {
+    color: COLORS.white,
+    fontWeight: "800",
+    fontSize: 16,
   },
-  altRow: { backgroundColor: "#fafafa" },
-  cell: { paddingHorizontal: 10, justifyContent: "center" },
 });
 
+/* ===== List styles (cards + search + rows) ===== */
+const listStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    marginHorizontal: 16,
+    gap: 8,
+  },
+  search: {
+    flex: 1,
+    height: 42,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#FAFAFA",
+    color: COLORS.primary,
+  },
+  controlButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+  },
+  controlText: {
+    color: COLORS.white,
+    fontWeight: "700",
+  },
+
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.white,
+  },
+  itemSelected: {
+    backgroundColor: "#EAF2FF",
+  },
+  itemText: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+  labelSelected: {
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+  dept_id: {
+    fontSize: 12,
+    color: COLORS.gray,
+    marginTop: 2,
+  },
+  check: {
+    width: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkText: {
+    fontSize: 18,
+    color: "transparent",
+  },
+  checkTextOn: {
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginLeft: 12,
+    marginRight: 12,
+  },
+  empty: {
+    padding: 20,
+    alignItems: "center",
+  },
+  emptyText: {
+    color: COLORS.gray,
+  },
+});

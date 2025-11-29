@@ -202,7 +202,8 @@ export async function initDb() {
             found_room_number TEXT,
             found_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             audit_id INTEGER,
-            notes TEXT
+            notes TEXT,
+            location TEXT
           );
         `);
 
@@ -530,4 +531,107 @@ export async function insertDeptRooms(room_tag, name, bldg_id) {
         VALUES (?, ?, ?);`,
     [room_tag, name, bldg_id]
   );
+}
+
+export async function clearTable(tableName) {
+  // console.log(`DB clearTable called for table: ${tableName}`);
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM ${tableName}`);
+  await db.runAsync(`DELETE FROM sqlite_sequence WHERE name='${tableName}'`);
+  // console.log(`Table ${tableName} cleared.`);
+}
+export async function insertIntoAuditing([item]) {
+  try {
+  const db = await getDb();
+  let assigned_to = '';
+  if (item.asset_notes !== '' && item.asset_notes != null) {
+    const explode = item.asset_notes.split(',');
+    assigned_to = explode[1].trim();
+  }
+  
+  db.runAsync(
+    `INSERT OR REPLACE INTO auditing 
+      (tag, name, dept_id, serial, po, location, bus_unit, assigned_to, purchase_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    [
+      item.asset_tag, item.asset_name, item.dept_name, item.serial_num, item.po ?? '', item.location, item.bus_unit, assigned_to, item.date_added
+    ]
+  );
+} catch (error) {
+  console.error("Error inserting into auditing:", error);
+}
+  db.closeAsync();
+}
+
+export async function insertIntoAuditingExcel([item]) {
+  try {
+  const db = await getDb();
+  let assigned_to = '';
+
+  db.runAsync(
+    `INSERT OR REPLACE INTO auditing 
+      (tag, name, dept_id, serial, po, location, bus_unit, assigned_to, purchase_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    [
+      item['Tag Number'], item['Descr'], item['Dept'], item['Serial Number'], item['PO No.'] ?? '', item['Location'], item['Unit'], assigned_to, item['Acq Date']
+    ]
+  );
+} catch (error) {
+  console.error("Error inserting into auditing:", error);
+}
+  db.closeAsync();
+}
+export async function selectAllAuditing() {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM auditing ORDER BY tag DESC`);
+}
+export async function deleteAuditingTable() {
+  const db = await getDb();
+  db.runAsync('DELETE FROM auditing');
+          
+  //await db.runAsync(`delete from auditing`);
+}
+export async function selectSingleAsset(tag) {
+  const db = await getDb();
+  return db.getFirstAsync(`SELECT * FROM auditing WHERE tag = ? ORDER BY tag DESC`, [tag]);
+}
+
+export async function updateAuditingFoundStatus(tag, geo_x, geo_y, elevation, found_room_tag, dept_id) {
+  console.log("updateAuditingFoundStatus called with:", tag, geo_x, geo_y, elevation, found_room_tag, dept_id);
+  const db = await getDb();
+  console.log("updateAuditingFoundStatus called with:", tag, geo_x, geo_y, elevation, found_room_tag, dept_id, in_audit);
+  const current_time = new Date().toISOString();
+  const in_audit = await db.getFirstAsync(`SELECT * FROM auditing WHERE tag = ?`, [tag]);
+  if (in_audit) {
+    await db.runAsync('UPDATE auditing SET found_status = ?, geo_x = ?, geo_y = ?, elevation = ?, found_room_tag = ?, found_timestamp = ? WHERE tag = ?',
+      ['Found', geo_x, geo_y, elevation, found_room_tag, current_time, tag]);
+  } else {
+    const asset_res = await fetch('https://dataworks-7b7x.onrender.com/phone-api/audit/get-asset-info.php',
+      {
+        method: 'POST',
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ tag: tag,
+          dept_id: dept_id
+          
+         })
+      });
+    const asset_data = await asset_res.json();
+    console.log("Asset data response:", asset_data);
+    if (asset_data.status === 'success' && asset_data.data.length > 0) {
+      const asset = asset_data.data;
+      await db.runAsync('INSERT INTO auditing (tag, name, serial, dept_id, serial, po, model, manufacturer, room_tag, type, bus_unit, status, purchase_date, geo_x, geo_y, elevation, found_status, found_room_tag, found_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [tag, asset.asset_name, asset.serial_num, asset.dept_id, asset.serial_num, asset.po, asset.asset_model, asset.make, asset.room_tag, asset.type2, asset.bus_unit, asset.asset_status, asset.date_added, geo_x, geo_y, elevation, 'Extra', found_room_tag, current_time]);
+    } else {
+      console.log("Asset not found in server, inserting with minimal info");
+      try {
+        await db.runAsync(
+          'INSERT INTO auditing (tag, name, serial, found_status, geo_x, geo_y, elevation, found_room_tag, found_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tag) DO UPDATE SET found_status = excluded.found_status, geo_x = excluded.geo_x, geo_y = excluded.geo_y, elevation = excluded.elevation, found_room_tag = excluded.found_room_tag, found_timestamp = excluded.found_timestamp',
+          [tag, 'Unknown Asset', 'N/A', 'Extra', geo_x, geo_y, elevation, found_room_tag, current_time]
+        );
+        console.log('Insert successful!');
+      } catch (err) {
+        console.error('Error inserting row:', err);
+      }
+    }
+  }
 }

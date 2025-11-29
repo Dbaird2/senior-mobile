@@ -44,7 +44,7 @@ export async function getMyProfiles() {
   email = JSON.parse(email).value;
   let pw = await getData("pw");
   pw = JSON.parse(pw).value;
-  console.log("Using email/pw:", email, pw);
+  //console.log("Using email/pw:", email, pw);
   const res = await fetch(`${API_BASE_URL}${GET_PROFILES_PATH}`, {
     headers: await authHeaders(),
     method: "POST",
