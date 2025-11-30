@@ -1,7 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as XLSX from "xlsx";
-import { getData } from "../lib/store-login";
+import { getData, storeLogin } from "../lib/store-login";
 
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
@@ -19,8 +19,7 @@ import {
 import {
   deleteAuditingTable,
   insertIntoAuditing,
-  insertIntoAuditingExcel,
-  selectAllAuditing
+  insertIntoAuditingExcel
 } from "../../src/sqlite.jsx";
 
 /**
@@ -188,8 +187,9 @@ async function startAuditFetch(dept) {
     );*/
     insertIntoAuditing([new_data[i]]);
   }
+  await storeLogin('audit_dept', dept_name);
   //console.log("Audit data inserted into SQLite for dept_name:", dept_name);
-  const auditing_records = selectAllAuditing();
+  //const auditing_records = selectAllAuditing();
   //console.log("Auditing Records in SQLite:", auditing_records);
   router.push({
     pathname: "/(auth)/audit",

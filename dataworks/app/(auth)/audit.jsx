@@ -317,7 +317,9 @@ export default function AuditScreen() {
               let pw = await getData("pw");
               pw = JSON.parse(pw).value;
               //await initDb();
-              const dept_name = await getData("audit_dept");
+              let dept_name = await getData("audit_dept");
+              dept_name = JSON.parse(dept_name).value;
+              console.log("Department Name from storage:", dept_name);
               const rows = await selectAllAuditing();
               const res = await fetch(COMPLETE_AUDIT_URL, {
                 method: "POST",
@@ -332,6 +334,7 @@ export default function AuditScreen() {
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               const json = await res.json();
               console.log("Finish Audit response:", json);
+              console.log("Audit submission response:", json);
               alert("Audit submitted successfully.");
             } catch (e) {
               console.warn("Finish audit failed:", e);
