@@ -2,6 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as XLSX from "xlsx";
 import { getData, storeLogin } from "../lib/store-login";
+import { useFocusEffect } from '@react-navigation/native';
 
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
@@ -19,7 +20,8 @@ import {
 import {
   deleteAuditingTable,
   insertIntoAuditing,
-  insertIntoAuditingExcel
+  insertIntoAuditingExcel,
+  selectAllAuditing,
 } from "../../src/sqlite.jsx";
 
 /**
@@ -153,7 +155,6 @@ function ListSelector({
 
 async function startAuditFetch(dept) {
   const dept_name = dept[0];
-  //await initDb();
   let email = await getData("email");
   email = JSON.parse(email).value;
   let pw = await getData("pw");
@@ -203,11 +204,32 @@ export default function StartAudit() {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState([]);
 
+  useFocusEffect(
+    useCallback(() => {
+      // This runs EVERY time the screen is focused
+      const loadData = async () => {
+        // e.g. read from SQLite again
+        // const data = await getDataFromSQLite();
+        // setItems(data);
+        const data = await selectAllAuditing();
+        await Promise.resolve(data);
+        if (data.length > 0) {
+          router.push({
+            pathname: "/(auth)/audit",
+          });
+        }
+      };
+
+      loadData();
+
+    }, [])
+  );
+
+
   /* ===== Upload (logic unchanged) ===== */
   const pickExcel = async () => {
     setError("");
     setLoading(true);
-    //await initDb();
     try {
       const res = await DocumentPicker.getDocumentAsync({
         multiple: false,

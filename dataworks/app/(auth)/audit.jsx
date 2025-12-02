@@ -1,5 +1,5 @@
 import { Camera, CameraView } from "expo-camera";
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -20,10 +20,10 @@ import { getData } from "../lib/store-login";
 
 import {
   getItem,
-  initDb,
   selectAllAuditing, // ← used after inserts to verify
   selectSingleAsset,
   updateAuditingFoundStatus,
+  deleteAuditingTable,
 } from "../../src/sqlite";
 
 const COLORS = {
@@ -80,7 +80,6 @@ export default function AuditScreen() {
     let cancelled = false;
     (async () => {
       try {
-        await initDb();
         const next = {};
         for (const a of pickedAssets) {
           const tag = String(a?.AssetTag ?? "");
@@ -130,7 +129,6 @@ export default function AuditScreen() {
     scanLockRef.current = true;
     setScanning(false);
 
-    await initDb();
 
     const loc = await getCurrentLocation();
     const payload = {
@@ -209,7 +207,6 @@ export default function AuditScreen() {
         onPress: async () => {
           setBusy(true);
           try {
-            await initDb();
 
             // fresh geo
             const loc = await getCurrentLocation();
@@ -348,6 +345,35 @@ export default function AuditScreen() {
     );
   };
 
+   const stopAudit = async () => {
+    Alert.alert(
+      "Stop Audit?",
+      "Do you want to stop this audit?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          onPress: async () => {
+            try {
+              setBusy(true);
+              const promise = deleteAuditingTable();
+              await Promise.resolve(promise);
+              
+            } catch (e) {
+              alert("Failed to stop audit.");
+            } finally {
+              setBusy(false);
+              router.push('/');
+            }
+          },
+        },
+      ]
+    );
+  };
+  const searchAssets = async () => {
+      router.push('/(tabs)/search');
+  };
+
   const renderAsset = ({ item }) => {
     const tag = String(item.AssetTag);
     const status = statusMap[tag] ?? "Pending";
@@ -451,11 +477,11 @@ export default function AuditScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Dataworks</Text>
         <Text style={styles.headerSubtitle}>Audit</Text>
       </View>
 
       {/* Top actions */}
+      <View style={{ marginTop: 0, marginBottom: 0 }}>
       <View style={[styles.card, styles.shadow]}>
         <Pressable
           style={[styles.btn, styles.btnPrimary]}
@@ -468,7 +494,15 @@ export default function AuditScreen() {
         </Pressable>
 
         {/* Centered Finish Audit button */}
-        <View style={{ marginTop: 10, alignItems: "center" }}>
+        <View style={{ marginTop: 5, alignItems: "center", display: "flex", flexDirection: "row", justifyContent: "center", gap: 5 }}>
+          
+          <Pressable
+            style={[styles.btn, styles.btnOutlineSmall]}
+            onPress={stopAudit}
+            disabled={busy}
+          >
+            <Text style={styles.btnOutlineSmallText}>Stop Audit</Text>
+          </Pressable>
           <Pressable
             style={[styles.btn, styles.btnOutlineSmall]}
             onPress={finishAudit}
@@ -476,6 +510,14 @@ export default function AuditScreen() {
           >
             <Text style={styles.btnOutlineSmallText}>Finish Audit</Text>
           </Pressable>
+            <Pressable
+            style={[styles.btn, styles.btnOutlineSmall]}
+            onPress={searchAssets}
+            disabled={busy}
+          >
+            <Text style={styles.btnOutlineSmallText}>Search</Text>
+          </Pressable>
+          </View>
         </View>
 
         {scannedData && (
@@ -519,17 +561,17 @@ export default function AuditScreen() {
             data={pickedAssets}
             renderItem={renderAsset}
             keyExtractor={(a) => a.AssetTag}
-            style={{ height: ASSETS_LIST_HEIGHT }}
+            style={{ }}
             showsVerticalScrollIndicator
             contentContainerStyle={{
               gap: 8,
-              paddingBottom: 16 + TABBAR + insets.bottom + 16,
+              //paddingBottom: 16 + TABBAR + insets.bottom + 16,
             }}
             ListFooterComponent={() => (
               <View
                 style={{
                   paddingTop: 8,
-                  marginBottom: TABBAR + insets.bottom + 24,
+                  //marginBottom: TABBAR + insets.bottom + 24,
                 }}
               >
                 <Pressable
@@ -552,14 +594,15 @@ export default function AuditScreen() {
   <Text style={styles.sectionTitle}>Assets In Audit</Text>
 
   {/* Search bar */}
+  <View style={{ display: "flex", flexDirection: "row" , gap: 8 }}>
         <TextInput
       value={search}
       onChangeText={setSearch}
       placeholder="Search by tag, name, or serial…"
       placeholderTextColor={COLORS.gray}
       style={{
-        flex: 1,
-        height: 42,
+        //flex: 1,
+       
         borderColor: COLORS.border,
         borderWidth: 1,
         borderRadius: 10,
@@ -585,6 +628,7 @@ export default function AuditScreen() {
     >
       <Text style={{ color: COLORS.white, fontWeight: "700" }}>Clear</Text>
     </Pressable>
+  </View>
         <Text style={styles.sectionTitle}>Assets</Text>
 
         {auditData.length === 0 ? (
@@ -595,21 +639,13 @@ export default function AuditScreen() {
               renderItem={renderTable}
                           keyExtractor={(a) => a.tag}
 
-            style={{ height: ASSETS_LIST_HEIGHT }}
-            showsVerticalScrollIndicatorr
+            style={{  }}
+            showsVerticalScrollIndicator
             contentContainerStyle={{
               gap: 8,
               paddingBottom: 16 + TABBAR + insets.bottom + 16,
             }}
-            ListFooterComponent={() => (
-              <View
-                style={{
-                  paddingTop: 8,
-                  marginBottom: TABBAR + insets.bottom + 24,
-                }}
-              >
-              </View>
-            )}
+            
           />
         )}
         
@@ -626,7 +662,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: COLORS.primary,
     paddingTop: Platform.OS === "ios" ? 0 : 40,
-    paddingBottom: 18,
+    paddingBottom: 10,
     alignItems: "center",
   },
   headerTitle: {
@@ -643,9 +679,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 12,
-    padding: 14,
-    marginHorizontal: 16,
-    marginTop: 12,
+    padding: 10,
+    marginHorizontal: 10,
+    marginTop: 9,
   },
 
   btn: {

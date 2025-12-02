@@ -16,7 +16,7 @@ async function getDb() {
 }
 // Initialize the database schema once
 async function getScalarCount(sql, params = []) {
-  await initDb();
+  //await initDb();
   const db = await getDb();
   const rows = await db.getAllAsync(sql, params);
   // console.log(rows);
@@ -174,6 +174,7 @@ export async function initDb() {
       await db.execAsync(`
           CREATE INDEX IF NOT EXISTS idx_profile_tag ON profile(tag, email);
         `);
+        await db.execAsync(`DROP TABLE IF EXISTS auditing;`);
 
       // console.log("Creating auditing table...");
       await db.execAsync(`
@@ -219,320 +220,6 @@ export async function initDb() {
   initPromise = null;
 }
 
-// Search items by tag or name (basic LIKE)
-export async function checkUser(username) {
-  // console.log("DB checkUser called with", username);
-  //await initDb();
-  //initDb();
-  const db = await getDb();
-
-
-  return db.getAllAsync(
-    `SELECT username, email FROM auth
-      WHERE  username = ? OR email = ?
-      ORDER BY username DESC
-      LIMIT 1`,
-    [username, username]
-  );
-}
-
-export async function logUserInfo(email, username) {
-  // console.log("DB logUserInfo called with", email, username);
-  //await initDb();
-  //initDb();
-  const db = await getDb();
-  await db.runAsync(
-    `INSERT INTO auth (email, username)
-      VALUES (?, ?)
-      `,
-    [email, username]
-  );
-}
-
-export async function listTables() {
-  // console.log("DB listTables called");
-  const db = await getDb();
-
-  try {
-    //await initDb();
-    return db.getAllAsync(
-      `SELECT name FROM sqlite_master WHERE type='table'`,
-      []
-    );
-  } catch (e) {
-    console.error("DB listTables error:", e);
-    return [];
-  }
-}
-
-export async function getItemCount() {
-  //await initDb();
-  const count = await getScalarCount("SELECT COUNT(*) FROM asset_table");
-  return count;
-}
-export async function getBldgCount() {
-  //await initDb();
-  const count = await getScalarCount("SELECT COUNT(*) FROM building");
-  // console.log("getBldgCount return: ", count);
-  return count;
-}
-export async function getDeptCount() {
-  //await initDb();
-  const count = await getScalarCount("SELECT COUNT(*) FROM department");
-  return count;
-}
-export async function getCustCount() {
-  //await initDb();
-  const count = await getScalarCount("SELECT COUNT(*) FROM department_cust");
-  return count;
-}
-export async function getRoomCount() {
-  //await initDb();
-  const count = await getScalarCount("SELECT COUNT(*) FROM room");
-  return count;
-}
-
-export async function clearUsers() {
-  // console.log("DB clearUsers called");
-  const db = await getDb();
-
-  // await initDb();
-  db.runSync(`DELETE FROM auth`);
-  db.runSync(`DELETE FROM sqlite_sequence WHERE name='auth'`);
-  // console.log("All users cleared.");
-  return true;
-}
-
-export async function deleteDatabase(database = "sqlite.db") {
-  // console.log("DB deleteDatabase called");
-  const dbPath = FileSystem.documentDirectory + database;
-  try {
-    await FileSystem.deleteAsync(dbPath, { idempotent: true });
-    // console.log("Database deleted successfully");
-  } catch (error) {
-    console.error("Error deleting database:", error);
-  }
-}
-
-export async function searchDeptItems(query, limit = 30, offset = 0) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  const db = await getDb();
-
-  const like = `${query}`;
-  return db.getAllAsync(
-    `SELECT * FROM asset_table
-      WHERE dept_id = ? COLLATE NOCASE
-      ORDER BY tag DESC
-      LIMIT ? OFFSET ?`,
-    [like, limit, offset]
-  );
-}
-
-export async function searchItems(query, limit = 30, offset = 0) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  const db = await getDb();
-
-  const like = `%${query}%`;
-  return db.getAllAsync(
-    `SELECT * FROM asset_table
-      WHERE tag LIKE ? COLLATE NOCASE
-          OR name LIKE ? COLLATE NOCASE
-      ORDER BY tag DESC
-      LIMIT ? OFFSET ?`,
-    [like, like, limit, offset]
-  );
-}
-export async function searchDepartment(query, limit = 30, offset = 0) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  const db = await getDb();
-
-  const like = `%${query}%`;
-  return db.getAllAsync(
-    `SELECT string_agg(C.custodian,',') AS Custodians,
-      D.dept_id, D.name, D.manager FROM department AS D 
-      LEFT JOIN department_cust AS C ON C.dept_id = D.dept_id
-      WHERE D.dept_id LIKE ? COLLATE NOCASE
-          OR D.name LIKE ? COLLATE NOCASE
-          OR D.manager LIKE ? COLLATE NOCASE
-          OR (SELECT string_agg(C.custodian,',') AS Custodians,
-      D.dept_id, D.name, D.manager FROM department AS D 
-      LEFT JOIN department_cust AS C ON C.dept_id = D.dept_id)
-      LIKE ? COLLATE NOCASE
-      GROUP BY D.dept_id
-      ORDER BY D.dept_id DESC
-      LIMIT ? OFFSET ?`,
-    [like, like, like, like, limit, offset]
-  );
-}
-export async function searchBuilding(query, limit = 30, offset = 0) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  const db = await getDb();
-
-  const like = `%${query}%`;
-  return db.getAllAsync(
-    `SELECT B.bldg_id, B.name AS bldg_name, R.name AS room_name, R.room_tag FROM building B LEFT JOIN room R ON
-        B.bldg_id = R.bldg_id 
-        WHERE B.bldg_id = ?
-        OR R.name LIKE ? COLLATE NOCASE
-        OR B.name LIKE ? COLLATE NOCASE
-      ORDER BY B.bldg_id ASC
-      LIMIT ? OFFSET ?`,
-    [query, like, like, limit, offset]
-  );
-}
-
-export async function getItem(tag) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  const db = await getDb();
-
-  return db.getFirstAsync(`SELECT * FROM asset_table WHERE tag = ?`, [tag]);
-}
-
-export async function getAllBuildings(limit = 30, offset = 0) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  const db = await getDb();
-
-  return db.getAllAsync(
-    `SELECT B.bldg_id, B.name as bldg_name, R.name as room_name, R.room_tag FROM building B LEFT JOIN room R ON
-        B.bldg_id = R.bldg_id ORDER BY B.bldg_id ASC LIMIT ? OFFSET ?`,
-    [limit, offset]
-  );
-}
-
-export async function getAllDepartments(limit = 30, offset = 0) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  const db = await getDb();
-
-  return db.getAllAsync(
-    `SELECT string_agg(C.custodian,',') AS Custodians,
-      D.dept_id, D.name, D.manager FROM department AS D 
-      LEFT JOIN department_cust AS C ON C.dept_id = D.dept_id GROUP BY D.dept_id ORDER BY D.dept_id DESC LIMIT ? OFFSET ?`,
-    [limit, offset]
-  );
-}
-
-export async function getAllRooms(limit = 30, offset = 0) {
-  //await initDb();
-  const db = await getDb();
-
-  //const db = await SQLite.openDatabaseAsync("app.db");
-
-  return db.getAllAsync(
-    `SELECT *
-        FROM room
-        LIMIT ? OFFSET ?`,
-    [limit, offset]
-  );
-}
-function sanitizeLimitOffset(limit = 30, offset = 0) {
-  const lim = Number.isFinite(limit) && limit >= 0 ? Math.floor(limit) : 30;
-  const off = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
-  return { lim, off };
-}
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export async function getAllItems(limit = 30, offset = 0) {
-  // console.log("DB getAllItems called with", limit, offset);
-  const db = await getDb();
-  const { lim, off } = sanitizeLimitOffset(limit, offset);
-
-  const sql = `
-      SELECT *
-      FROM asset_table
-      ORDER BY tag DESC
-      LIMIT ${lim} OFFSET ${off};
-    `;
-  // console.log("Executing SQL:", sql);
-  // console.log("DB instance:", db);
-
-  const rows = await db.getAllAsync(sql);
-  //await sleep(1000);
-  // console.log("Fetched items:", rows.length);
-  //await db.closeAsync();
-  return rows ?? [];
-}
-
-export async function insertItem(tag, name, room_tag, serial, dept_id) {
-  ////await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  await initDb();
-  const db = await getDb();
-
-  db.runAsync(
-    `INSERT INTO asset_table (tag, name, room_tag, serial, dept_id)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(tag) DO UPDATE SET
-       name=excluded.name,
-       room_tag=excluded.room_tag,
-       serial=excluded.serial`,
-    [tag, name, room_tag, serial, dept_id]
-  );
-}
-
-export async function insertBldg(name, bldg_id) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  await initDb();
-  const db = await getDb();
-
-  await db.runAsync(
-    `INSERT INTO building (name, bldg_id)
-      VALUES (?, ?)
-      ON CONFLICT(bldg_id) DO UPDATE SET
-        name=excluded.name`,
-    [name, bldg_id]
-  );
-}
-
-export async function insertDept(name, dept_id, manager) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  await initDb();
-  const db = await getDb();
-
-  await db.runAsync(
-    `INSERT INTO department (name, dept_id, manager)
-      VALUES (?, ?, ?)
-      ON CONFLICT(dept_id) DO UPDATE SET
-        name=excluded.name,
-        manager=excluded.manager`,
-    [name, dept_id, manager]
-  );
-}
-
-export async function insertDeptCustodian(custodian, dept_id) {
-  //await initDb();
-  await initDb();
-  const db = await getDb();
-
-  await db.runAsync(
-    `INSERT OR IGNORE INTO department_cust (custodian, dept_id)
-      VALUES (?, ?)`,
-    [custodian, dept_id]
-  );
-}
-
-export async function insertDeptRooms(room_tag, name, bldg_id) {
-  //await initDb();
-  //const db = await SQLite.openDatabaseAsync("app.db");
-  await initDb();
-  const db = await getDb();
-  /* do inserts here */
-  //// console.log(room_tag, name, bldg_id);
-  await db.runAsync(
-    `INSERT INTO room (room_tag, name, bldg_id)
-        VALUES (?, ?, ?);`,
-    [room_tag, name, bldg_id]
-  );
-}
-
 export async function clearTable(tableName) {
   // console.log(`DB clearTable called for table: ${tableName}`);
   const db = await getDb();
@@ -567,7 +254,7 @@ export async function insertIntoAuditingExcel([item], assigned_to) {
   try {
   const db = await getDb();
 
-  db.runAsync(
+  await db.runAsync(
     `INSERT OR REPLACE INTO auditing 
       (tag, name, dept_id, serial, po, location, bus_unit, assigned_to, purchase_date)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
@@ -604,11 +291,17 @@ export async function selectAllAuditing() {
   const db = await getDb();
   return db.getAllAsync(`SELECT * FROM auditing ORDER BY tag DESC`);
 }
+
+export async function selectAuditingCount() {
+  const db = await getDb();
+  return db.getFirstAsync(`SELECT COUNT(*) as count FROM auditing`);
+}
+
 export async function deleteAuditingTable() {
   const db = await getDb();
-  db.runAsync('DELETE FROM auditing');
-          
-  //await db.runAsync(`delete from auditing`);
+  await db.runAsync('DELETE FROM auditing');
+  await db.runAsync(`DELETE FROM sqlite_sequence WHERE name='auditing'`);
+  console.log("Auditing table cleared.");
 }
 export async function selectSingleAsset(tag) {
   const db = await getDb();
